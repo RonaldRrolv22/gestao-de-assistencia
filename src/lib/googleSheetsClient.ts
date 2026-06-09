@@ -7,20 +7,27 @@ import { google } from "googleapis";
 import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 
+function parseInlineServiceAccount(raw: string): Record<string, unknown> {
+  let json = raw.trim().replace(/^["']|["']$/g, "");
+  try {
+    const decoded = Buffer.from(json, "base64").toString("utf8");
+    JSON.parse(decoded);
+    json = decoded;
+  } catch {
+    // valor já é JSON em texto
+  }
+  return JSON.parse(json) as Record<string, unknown>;
+}
+
 function loadServiceAccountJson(): Record<string, unknown> {
-  const inline = process.env.GOOGLE_SERVICE_ACCOUNT;
+  const inline =
+    process.env.GOOGLE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
   const pathEnv =
     process.env.GOOGLE_SERVICE_ACCOUNT_PATH ||
     process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 
   if (inline) {
-    try {
-      const decoded = Buffer.from(inline, "base64").toString("utf8");
-      JSON.parse(decoded);
-      return JSON.parse(decoded);
-    } catch {
-      return JSON.parse(inline);
-    }
+    return parseInlineServiceAccount(inline);
   }
 
   if (pathEnv && existsSync(resolve(pathEnv))) {

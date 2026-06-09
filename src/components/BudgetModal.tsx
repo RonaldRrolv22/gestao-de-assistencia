@@ -431,21 +431,6 @@ export default function BudgetModal({
     }
   }, [shippingCep]);
 
-  useEffect(() => {
-    if (!canEdit || isWarranty) return;
-
-    const cleanCep = shippingCep.replace(/\D/g, "");
-    if (cleanCep.length !== 8) return;
-    if (lastQuotedCepRef.current === cleanCep) return;
-    if (confirmedShippingCepRef.current === cleanCep && shipping > 0) return;
-
-    const timer = setTimeout(() => {
-      void handleCalculateShipping(cleanCep);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [shippingCep, canEdit, isWarranty, shipping, handleCalculateShipping]);
-
   const pdfPaymentInfo = resolveBudgetPdfPaymentInfo(
     paymentSnapshot,
     isWarranty,

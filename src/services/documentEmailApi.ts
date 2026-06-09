@@ -38,9 +38,6 @@ async function postEmailApi(path: string, body: Record<string, string>): Promise
   const err = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    // #region agent log
-    fetch('http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8ececf'},body:JSON.stringify({sessionId:'8ececf',location:'documentEmailApi.ts:postEmailApi',message:'email API error',data:{path,status:res.status,error:err.error,message:err.message,debug:err._debug},timestamp:Date.now(),hypothesisId:'H1-H4'})}).catch(()=>{});
-    // #endregion
     throw new Error(err.message || "Erro ao enviar e-mail.");
   }
 
@@ -65,9 +62,6 @@ export async function sendDocumentEmail(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    // #region agent log
-    fetch('http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8ececf'},body:JSON.stringify({sessionId:'8ececf',location:'documentEmailApi.ts:sendDocumentEmail',message:'send-document error',data:{status:res.status,error:err.error,message:err.message,debug:err._debug},timestamp:Date.now(),hypothesisId:'H1-H4'})}).catch(()=>{});
-    // #endregion
     throw new Error(err.message || "Erro ao enviar e-mail.");
   }
 

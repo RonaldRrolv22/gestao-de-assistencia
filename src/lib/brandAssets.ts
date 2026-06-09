@@ -7,24 +7,37 @@ import fs from "fs";
 import path from "path";
 
 const NB_CABECALHO_CID = "nbcabecalho@neurobots";
+const NB_CABECALHO_CANDIDATES = [
+  "nbcabecalho.png",
+  "nbcabecalho.jpg",
+  "nbcabecalho.jpeg",
+  "nbcabecalho.webp",
+  "nbcabecalho",
+];
 
-function findFileInPublic(candidates: string[]): string | null {
-  const publicDir = path.join(process.cwd(), "public");
-  for (const name of candidates) {
-    const filePath = path.join(publicDir, name);
-    if (fs.existsSync(filePath)) return filePath;
+let cachedNbCabecalhoPath: string | null | undefined;
+
+function assetSearchDirs(): string[] {
+  const cwd = process.cwd();
+  return [path.join(cwd, "public"), path.join(cwd, "dist")];
+}
+
+function findFileInAssetDirs(candidates: string[]): string | null {
+  for (const dir of assetSearchDirs()) {
+    for (const name of candidates) {
+      const filePath = path.join(dir, name);
+      if (fs.existsSync(filePath)) return filePath;
+    }
   }
   return null;
 }
 
 function findNbCabecalhoFile(): string | null {
-  return findFileInPublic([
-    "nbcabecalho.png",
-    "nbcabecalho.jpg",
-    "nbcabecalho.jpeg",
-    "nbcabecalho.webp",
-    "nbcabecalho",
-  ]);
+  if (cachedNbCabecalhoPath !== undefined) {
+    return cachedNbCabecalhoPath;
+  }
+  cachedNbCabecalhoPath = findFileInAssetDirs(NB_CABECALHO_CANDIDATES);
+  return cachedNbCabecalhoPath;
 }
 
 export function getNbCabecalhoBuffer(): Buffer | null {
@@ -52,5 +65,9 @@ export function getNbCabecalhoCid(): string {
 
 export function getNbCabecalhoSrcForEmail(): string {
   const buffer = getNbCabecalhoBuffer();
-  return buffer ? `cid:${NB_CABECALHO_CID}` : getNbCabecalhoUrl();
+  const src = buffer ? `cid:${NB_CABECALHO_CID}` : getNbCabecalhoUrl();
+  if (!buffer) {
+    console.warn("[brandAssets] nbcabecalho não encontrado em public/ ou dist/; usando URL externa no e-mail.");
+  }
+  return src;
 }

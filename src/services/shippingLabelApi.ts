@@ -68,3 +68,29 @@ export async function generateShippingLabel(
 
   return result;
 }
+
+export async function downloadShippingLabelZpl(requestId: string): Promise<void> {
+  const token = await getAuthToken();
+  if (!token) throw new Error("Não autenticado.");
+
+  const res = await fetch("/api/shipping/download-label", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ requestId }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || "Erro ao baixar etiqueta de envio.");
+  }
+
+  const result = data as { zplContent?: string; fileName?: string };
+  if (!result.zplContent) {
+    throw new Error("Arquivo de etiqueta indisponível.");
+  }
+
+  downloadZplFile(result.zplContent, result.fileName || `etiqueta_${requestId}.zpl`);
+}

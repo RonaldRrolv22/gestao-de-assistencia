@@ -13,6 +13,26 @@ import { sanitizeRequestDocId } from "../services/requestIds";
 
 const REQUESTS_COLLECTION = "maintenance_requests";
 
+/** Remove propriedades `undefined` — Firestore Admin rejeita valores undefined em updates. */
+export function sanitizeFirestoreData<T>(value: T): T {
+  if (value === undefined) {
+    return value;
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeFirestoreData(item)) as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (nested !== undefined) {
+      out[key] = sanitizeFirestoreData(nested);
+    }
+  }
+  return out as T;
+}
+
 function legacyFieldsForSuccess(
   type: EmailDeliveryType,
   sentAt: string,
@@ -68,14 +88,16 @@ export async function appendEmailDelivery(
   const ref = getAdminDb().collection(REQUESTS_COLLECTION).doc(docId);
   const snap = await ref.get();
   const existing = (snap.data()?.emailDeliveries || []) as EmailDeliveryRecord[];
-  const updated = [...existing, record];
+  const sanitizedRecord = sanitizeFirestoreData(record);
+  const sanitizedExisting = existing.map((item) => sanitizeFirestoreData(item));
+  const updated = [...sanitizedExisting, sanitizedRecord];
 
   const patch: Record<string, unknown> = { emailDeliveries: updated };
   if (record.status === "sent") {
     Object.assign(patch, legacyFieldsForSuccess(record.type, record.sentAt, record.sentBy));
   }
 
-  await ref.update(patch);
+  await ref.update(sanitizeFirestoreData(patch));
 }
 
 export function createDeliveryId(): string {

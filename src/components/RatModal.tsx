@@ -30,6 +30,22 @@ import {
 } from "lucide-react";
 import ConfirmDialog from "./ui/ConfirmDialog";
 import { formatCurrency, formatDate } from "../utils";
+import { formatRequestDisplayId } from "../services/requestIds";
+import { downloadShippingLabelZpl } from "../services/shippingLabelApi";
+import {
+  RAT_BTN_HUB,
+  RAT_BTN_OUTLINE_ORANGE,
+  RAT_BTN_PRIMARY,
+  RAT_BTN_SECONDARY,
+  RAT_DEFECT_OPTION,
+  RAT_DEFECT_OPTION_ACTIVE,
+  RAT_DEFECT_OPTION_IDLE,
+  RAT_FOOTER,
+  RAT_INPUT,
+  RAT_LABEL,
+  RAT_SUMMARY_CARD,
+  RAT_TEXTAREA,
+} from "./rat/ratModalStyles";
 import { isAdminProfile } from "../services/userRoles";
 import { uploadRequestAttachment, uploadPaymentProof } from "../services/storageService";
 import { resolveFileUrl } from "../services/requestIds";
@@ -111,6 +127,8 @@ export default function RatModal({
   // PDF Preview control
   const [showPdfPreview, setShowPdfPreview] = useState(initialShowPdf);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [savingRat, setSavingRat] = useState(false);
+  const [downloadingLabel, setDownloadingLabel] = useState(false);
 
   useEffect(() => {
     if (initialShowPdf) setShowPdfPreview(true);
@@ -257,10 +275,18 @@ export default function RatModal({
   };
 
   const confirmFinalize = async () => {
-    const payload = getRatPayload("Finalizado");
-    await Promise.resolve(onSaveRat(request.id, payload));
-    await Promise.resolve(onFinalizeRat(request.id));
-    setShowFinalizeConfirm(false);
+    setSavingRat(true);
+    try {
+      const payload = getRatPayload("Finalizado");
+      await Promise.resolve(onSaveRat(request.id, payload));
+      await Promise.resolve(onFinalizeRat(request.id));
+      setShowFinalizeConfirm(false);
+      appNoticeSuccess("RAT finalizada com sucesso.");
+    } catch (err) {
+      appNoticeError(err instanceof Error ? err.message : "Erro ao finalizar a RAT.");
+    } finally {
+      setSavingRat(false);
+    }
   };
 
   const confirmReopen = () => {
@@ -351,8 +377,9 @@ export default function RatModal({
       const attachmentPayload = prepareAttachmentsForPdf(attachments, getAttachmentUrl);
 
       if (attachments.length > 0 && attachmentPayload.length === 0) {
-        appNoticeWarning("Nenhum anexo pôde ser incluído no PDF. Verifique se os arquivos foram enviados corretamente.");
-        return;
+        appNoticeWarning(
+          "Não foi possível incluir os anexos no PDF. O relatório principal será baixado sem os arquivos anexados."
+        );
       }
 
       await downloadHtmlAsPdf(htmlContent, `${titleStr}.pdf`, {
@@ -365,23 +392,58 @@ export default function RatModal({
       setExportingPdf(false);
     }
   };
+
+  const handleDownloadShippingLabel = async () => {
+    setDownloadingLabel(true);
+    try {
+      await downloadShippingLabelZpl(request.id);
+      appNoticeSuccess("Etiqueta baixada com sucesso.");
+    } catch (err) {
+      appNoticeError(err instanceof Error ? err.message : "Erro ao baixar etiqueta.");
+    } finally {
+      setDownloadingLabel(false);
+    }
+  };
+
+  const confirmSaveDraft = async () => {
+    setSavingRat(true);
+    try {
+      const payload = getRatPayload("Rascunho");
+      await Promise.resolve(onSaveRat(request.id, payload));
+      setShowSaveDraftConfirm(false);
+      appNoticeSuccess("Rascunho do RAT salvo com sucesso.");
+    } catch (err) {
+      appNoticeError(err instanceof Error ? err.message : "Erro ao salvar rascunho do RAT.");
+    } finally {
+      setSavingRat(false);
+    }
+  };
   return (
     <>
-      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto font-sans text-xs">
-        <div id="rat-modal-container" className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl border border-slate-100 max-h-[92vh] flex flex-col overflow-hidden">
+      {savingRat && (
+        <div className="fixed inset-0 z-[60] bg-white/75 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-brand-orange" />
+          <p className="text-sm font-semibold text-slate-700">Salvando RAT...</p>
+        </div>
+      )}
+      <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto font-sans text-xs">
+        <div id="rat-modal-container" className="bg-white rounded-3xl w-full max-w-4xl shadow-[0_24px_64px_-12px_rgba(15,23,42,0.18)] border border-slate-200/80 max-h-[92vh] flex flex-col overflow-hidden animate-fade-in">
           
-          {/* Main header block */}
-          <div className="p-5 border-b border-slate-150 flex items-center justify-between bg-slate-900 text-slate-100">
-            <div>
-              <span className="text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded font-mono font-semibold uppercase tracking-wider">
-                RAT - Relatório de Assistência Técnica
+          {/* Header premium alinhado ao orçamento */}
+          <div className="px-6 py-5 border-b border-slate-200/80 bg-white flex items-start justify-between gap-4 shrink-0">
+            <div className="min-w-0 border-l-4 border-brand-orange pl-4">
+              <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wider bg-orange-50 text-brand-orange border border-orange-200/70 px-2.5 py-1 rounded-full">
+                RAT — Relatório de Assistência Técnica
               </span>
-              <h3 className="font-semibold text-white text-base mt-1.5">
-                Laudo de O.S. {request.id} • {request.clientCompany}
+              <h3 className="font-semibold text-base sm:text-lg text-slate-900 mt-2.5 leading-snug tracking-tight">
+                Laudo de O.S.
               </h3>
+              <p className="text-xs text-slate-500 font-mono mt-1">
+                {formatRequestDisplayId(request.id, request.columnId)} • {request.clientCompany}
+              </p>
             </div>
             
-            <button onClick={onClose} className="text-slate-400 hover:text-white p-1.5 hover:bg-slate-800 rounded-lg transition-all">
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 p-2 hover:bg-slate-100 rounded-xl transition-all duration-200 shrink-0">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -389,39 +451,39 @@ export default function RatModal({
           {/* Body contents scroll Area */}
           <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-700">
             
-            {/* Automatic header labels: Client info and Equipment Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
-              <div className="space-y-1">
-                <h4 className="font-bold text-slate-450 uppercase tracking-wider text-[10px]">Paciente/Cliente</h4>
-                <p className="text-slate-900 font-bold">{request.clientName}</p>
-                <p className="text-slate-500">{request.clientCompany}</p>
-                <p className="text-slate-400">{request.clientAddress}, {request.clientCity} - {request.clientState}</p>
+            {/* Card resumo cliente/equipamento */}
+            <div className={RAT_SUMMARY_CARD}>
+              <div className="space-y-2">
+                <h4 className={RAT_LABEL}>Paciente/Cliente</h4>
+                <p className="text-slate-900 font-semibold text-sm">{request.clientName}</p>
+                <p className="text-slate-600 text-xs">{request.clientCompany}</p>
+                <p className="text-slate-500 text-xs">{request.clientAddress}, {request.clientCity} - {request.clientState}</p>
               </div>
 
-              <div className="space-y-1">
-                <h4 className="font-bold text-slate-450 uppercase tracking-wider text-[10px]">Equipamento Atendido</h4>
-                <p className="text-slate-900 font-bold">{request.productName}</p>
-                <p className="text-slate-500">S/N de Série: <strong className="font-mono">{request.serialNumber || "N/A"}</strong></p>
+              <div className="space-y-2">
+                <h4 className={RAT_LABEL}>Equipamento Atendido</h4>
+                <p className="text-slate-900 font-semibold text-sm">{request.productName}</p>
+                <p className="text-slate-600 text-xs">S/N de Série: <strong className="font-mono text-slate-800">{request.serialNumber || "N/A"}</strong></p>
                 {onOpenHubTestes && (
                   <button
                     type="button"
                     onClick={() => void onOpenHubTestes()}
-                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white border border-violet-700 rounded-lg text-[10px] font-bold cursor-pointer transition-all uppercase tracking-wider font-sans shadow-sm"
+                    className={`mt-2 ${RAT_BTN_HUB}`}
                   >
                     <FlaskConical className="h-3.5 w-3.5 shrink-0" />
                     <span>Testar dispositivo agora</span>
                   </button>
                 )}
                 {request.budget && (
-                  <div className="mt-1 flex flex-col items-start gap-1">
-                    <p className="text-blue-700 font-semibold text-[11px]">
+                  <div className="mt-2 flex flex-col items-start gap-2">
+                    <p className="text-slate-700 font-medium text-[11px]">
                       Orçamento: {request.budget.isWarranty ? "Sob Garantia Técnica (Isento)" : `Particular faturado em ${formatCurrency(request.budget.totalFinal)}`}
                     </p>
                     {onOpenBudget && (
                       <button
                         type="button"
                         onClick={() => onOpenBudget(request)}
-                        className="mt-1.5 inline-flex items-center gap-1 px-3 py-1 bg-white hover:bg-orange-50 text-brand-orange border border-border rounded-lg text-[10px] font-bold cursor-pointer transition-all uppercase tracking-wider font-sans shadow-xs"
+                        className={RAT_BTN_OUTLINE_ORANGE}
                       >
                         <FileText className="h-3.5 w-3.5 text-brand-orange shrink-0" />
                         <span>Abrir Orçamento</span>
@@ -447,7 +509,7 @@ export default function RatModal({
 
             {/* Section 1: Diagnóstico Técnico */}
             <div className="space-y-2">
-              <label htmlFor="rat-diagnostic" className="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">
+              <label htmlFor="rat-diagnostic" className={RAT_LABEL}>
                 Diagnóstico Técnico Avançado *
               </label>
               <textarea
@@ -456,13 +518,13 @@ export default function RatModal({
                 disabled={isFinalizado || !canEdit}
                 value={diagnostic}
                 onChange={(e) => setDiagnostic(e.target.value)}
-                className={`w-full text-slate-800 p-3 h-28 border rounded-xl focus:outline-none focus:ring-2 text-xs ${showErrors && !diagnostic.trim() ? "border-red-500 bg-red-50/25 focus:ring-red-500/20 focus:border-red-500" : "border-slate-250 focus:ring-sky-500/20 focus:border-sky-500"}`}
+                className={`${RAT_TEXTAREA} ${showErrors && !diagnostic.trim() ? "border-red-400 bg-red-50/30 focus:ring-red-200 focus:border-red-400" : ""}`}
               />
             </div>
 
             {/* Campo: Causa do Defeito */}
             <div className="space-y-2 pb-1">
-              <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">
+              <label className={RAT_LABEL}>
                 Causa do Defeito *
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -479,10 +541,8 @@ export default function RatModal({
                     <label
                       key={option}
                       htmlFor={`defect-cause-${option}`}
-                      className={`flex items-center gap-2 px-3 py-2 border rounded-xl cursor-pointer transition-all ${
-                        isChecked
-                          ? "bg-sky-50/50 border-sky-450 text-sky-950 font-semibold"
-                          : "bg-white border-slate-200 text-slate-650 hover:bg-slate-50"
+                      className={`${RAT_DEFECT_OPTION} ${
+                        isChecked ? RAT_DEFECT_OPTION_ACTIVE : RAT_DEFECT_OPTION_IDLE
                       } ${isFinalizado || !canEdit ? "opacity-75 cursor-not-allowed" : ""}`}
                     >
                       <input
@@ -498,7 +558,7 @@ export default function RatModal({
                               : [...prev, option]
                           );
                         }}
-                        className="h-3.5 w-3.5 rounded border-slate-350 text-sky-650 focus:ring-sky-500 cursor-pointer disabled:cursor-not-allowed"
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-brand-orange focus:ring-brand-orange/30 cursor-pointer disabled:cursor-not-allowed"
                       />
                       <span className="text-xs select-none">{option}</span>
                     </label>
@@ -872,21 +932,26 @@ export default function RatModal({
 
           </div>
 
-          {/* Large bottom Action bar */}
-          <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col gap-2">
+          {/* Footer premium */}
+          <div className={RAT_FOOTER}>
             <EmailStatusIcons
               request={request}
               types={["maintenance_started", "rat", "tracking"]}
             />
             <div className="flex flex-wrap justify-between items-center gap-3">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => setShowPdfPreview(true)}
-                className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 bg-slate-800 text-white font-semibold rounded-xl hover:bg-slate-900 transition-all cursor-pointer"
+                onClick={() => void handleDownloadRatPdf()}
+                disabled={exportingPdf}
+                className={`${RAT_BTN_SECONDARY} disabled:opacity-60`}
               >
-                <Printer className="h-4 w-4" />
-                <span>Baixar PDF da RAT</span>
+                {exportingPdf ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Printer className="h-4 w-4" />
+                )}
+                <span>{exportingPdf ? "Gerando PDF..." : "Baixar PDF da RAT"}</span>
               </button>
 
               {isFinalizado && !isClosed && (
@@ -923,6 +988,20 @@ export default function RatModal({
                       <Package className="h-4 w-4" />
                       <span>Rastreio: {request.shippingLabel.trackingCode}</span>
                     </div>
+                    <button
+                      type="button"
+                      id="btn-download-shipping-label"
+                      onClick={() => void handleDownloadShippingLabel()}
+                      disabled={downloadingLabel}
+                      className={`${RAT_BTN_SECONDARY} disabled:opacity-60`}
+                    >
+                      {downloadingLabel ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Printer className="h-4 w-4" />
+                      )}
+                      <span>{downloadingLabel ? "Baixando..." : "Baixar etiqueta"}</span>
+                    </button>
                     {canResendTrackingEmail && (
                       <button
                         type="button"
@@ -959,11 +1038,14 @@ export default function RatModal({
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="hidden sm:inline-flex text-[10px] font-semibold uppercase tracking-wider text-slate-400 border border-slate-200 rounded-full px-2 py-0.5">
+                MAN
+              </span>
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 border border-slate-200 hover:bg-slate-100 text-slate-600 font-semibold rounded-xl text-xs"
+                className={RAT_BTN_SECONDARY}
               >
                 Cancelar
               </button>
@@ -973,7 +1055,7 @@ export default function RatModal({
                   type="button"
                   id="btn-reopen-rat"
                   onClick={() => setShowReopenConfirm(true)}
-                  className="px-4 py-2 bg-amber-50 border border-amber-300 text-amber-800 font-bold rounded-xl text-xs hover:bg-amber-100 cursor-pointer flex items-center gap-1.5"
+                  className={`${RAT_BTN_OUTLINE_ORANGE} px-4 py-2.5 normal-case tracking-normal text-xs`}
                 >
                   <ClipboardCheck className="h-3.5 w-3.5" />
                   <span>Reabrir RAT</span>
@@ -986,7 +1068,8 @@ export default function RatModal({
                     type="button"
                     id="btn-save-rat-draft"
                     onClick={handleSaveDraft}
-                    className="px-4 py-2 bg-slate-100 border border-slate-300 rounded-xl hover:bg-slate-200 text-slate-800 font-bold"
+                    disabled={savingRat}
+                    className={`${RAT_BTN_OUTLINE_ORANGE} px-4 py-2.5 normal-case tracking-normal text-xs disabled:opacity-60`}
                   >
                     Salvar Rascunho
                   </button>
@@ -994,7 +1077,8 @@ export default function RatModal({
                     type="button"
                     id="btn-finalize-rat"
                     onClick={handleFinalize}
-                    className="flex justify-center items-center gap-1.5 px-5 py-2 bg-emerald-600 text-white hover:bg-emerald-500 rounded-xl font-bold shadow-md shadow-emerald-500/10 cursor-pointer"
+                    disabled={savingRat}
+                    className={`${RAT_BTN_PRIMARY} disabled:opacity-60`}
                   >
                     <CheckSquare className="h-4 w-4" />
                     <span>Finalizar RAT</span>
@@ -1457,9 +1541,10 @@ export default function RatModal({
               <button
                 type="button"
                 onClick={() => void confirmFinalize()}
-                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 font-bold text-white rounded-xl shadow-sm hover:shadow transition-all cursor-pointer text-xs"
+                disabled={savingRat}
+                className="flex-1 py-2 bg-brand-gradient hover:opacity-95 font-bold text-white rounded-xl shadow-sm transition-all cursor-pointer text-xs disabled:opacity-60"
               >
-                Sim, Finalizar
+                {savingRat ? "Finalizando..." : "Sim, Finalizar"}
               </button>
             </div>
           </div>
@@ -1532,15 +1617,11 @@ export default function RatModal({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  const payload = getRatPayload("Rascunho");
-                  onSaveRat(request.id, payload);
-                  setShowSaveDraftConfirm(false);
-                  appNoticeSuccess("Rascunho do RAT salvo com sucesso.");
-                }}
-                className="flex-1 py-2 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 font-bold text-white rounded-xl shadow-sm hover:shadow transition-all cursor-pointer text-xs"
+                onClick={() => void confirmSaveDraft()}
+                disabled={savingRat}
+                className={`flex-1 py-2 bg-brand-gradient hover:opacity-95 font-bold text-white rounded-xl shadow-sm transition-all cursor-pointer text-xs disabled:opacity-60`}
               >
-                Sim, Salvar rascunho
+                {savingRat ? "Salvando..." : "Sim, Salvar rascunho"}
               </button>
             </div>
           </div>

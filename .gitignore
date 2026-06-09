@@ -28,3 +28,6 @@ Thumbs.db
 
 # Local tooling
 assets/.aistudio/
+
+.vercel
+.env*

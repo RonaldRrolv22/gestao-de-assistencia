@@ -8,6 +8,19 @@ import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 
 let initialized = false;
+let firestoreSettingsApplied = false;
+
+function parseServiceAccountJson(raw: string): admin.ServiceAccount {
+  let json = raw.trim().replace(/^["']|["']$/g, "");
+  try {
+    const decoded = Buffer.from(json, "base64").toString("utf8");
+    JSON.parse(decoded);
+    json = decoded;
+  } catch {
+    // valor já é JSON em texto
+  }
+  return JSON.parse(json) as admin.ServiceAccount;
+}
 
 export function initFirebaseAdmin(): admin.app.App {
   if (initialized && admin.apps.length) {
@@ -18,15 +31,8 @@ export function initFirebaseAdmin(): admin.app.App {
   const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 
   if (serviceAccountEnv) {
-    let json: string;
-    try {
-      json = Buffer.from(serviceAccountEnv, "base64").toString("utf8");
-      JSON.parse(json);
-    } catch {
-      json = serviceAccountEnv;
-    }
     admin.initializeApp({
-      credential: admin.credential.cert(JSON.parse(json)),
+      credential: admin.credential.cert(parseServiceAccountJson(serviceAccountEnv)),
       storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || "manutencao-nb.firebasestorage.app",
     });
   } else if (serviceAccountPath && existsSync(resolve(serviceAccountPath))) {
@@ -59,7 +65,12 @@ export function getAdminAuth() {
 }
 
 export function getAdminDb() {
-  return initFirebaseAdmin().firestore();
+  const db = initFirebaseAdmin().firestore();
+  if (!firestoreSettingsApplied) {
+    db.settings({ ignoreUndefinedProperties: true });
+    firestoreSettingsApplied = true;
+  }
+  return db;
 }
 
 export function getAdminStorage() {

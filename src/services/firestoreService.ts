@@ -178,7 +178,7 @@ export async function createMaintenanceRequest(
 export async function updateMaintenanceRequest(request: MaintenanceRequest): Promise<void> {
   const docId = sanitizeRequestDocId(request.id);
   await updateDoc(doc(db, COLLECTIONS.requests, docId), {
-    ...request,
+    ...stripUndefinedDeep(request),
     updatedAt: serverTimestamp(),
   });
 }

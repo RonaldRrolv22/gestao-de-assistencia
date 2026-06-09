@@ -112,9 +112,9 @@ async function recordSkipped(
     subject,
     provider: getActiveEmailProvider(),
     sentAt,
-    sentBy,
     trigger,
     error: reason,
+    ...(sentBy ? { sentBy } : {}),
   };
   await appendEmailDelivery(requestId, record);
   return {
@@ -145,9 +145,9 @@ async function recordFailed(
     subject,
     provider: getActiveEmailProvider(),
     sentAt,
-    sentBy,
     trigger,
     error,
+    ...(sentBy ? { sentBy } : {}),
   };
   await appendEmailDelivery(requestId, record);
   throw new Error(error);
@@ -209,11 +209,11 @@ async function dispatchEmail(
       recipient,
       subject,
       provider: sendResult.provider,
-      messageId: sendResult.messageId,
       sentAt,
-      sentBy: options.sentBy,
       trigger: options.trigger,
-      metadata,
+      ...(sendResult.messageId ? { messageId: sendResult.messageId } : {}),
+      ...(options.sentBy ? { sentBy: options.sentBy } : {}),
+      ...(metadata ? { metadata } : {}),
     };
     await appendEmailDelivery(requestId, record);
 

@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import dns from "dns";
 import "dotenv/config";
 import { getAdminAuth, getAdminDb, verifyAdminToken } from "./src/lib/firebaseAdmin";
@@ -48,21 +47,6 @@ const VALID_USER_PROFILES = ["Administrador", "Técnico", "Usuário"] as const;
 
 function isValidUserProfile(profile: unknown): profile is (typeof VALID_USER_PROFILES)[number] {
   return typeof profile === "string" && (VALID_USER_PROFILES as readonly string[]).includes(profile);
-}
-
-function getRuntimeDebugSnapshot() {
-  const emailProvider = (process.env.EMAIL_PROVIDER || "").toLowerCase();
-  return {
-    isVercel: Boolean(process.env.VERCEL),
-    hasFirebaseAdminEnv: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT?.trim()),
-    hasFirebaseAdminPath: Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_PATH?.trim()),
-    hasHubUrl: Boolean((process.env.HUB_TESTES_URL || "").trim()),
-    emailProvider: emailProvider || (process.env.SMTP_USER && process.env.SMTP_PASS ? "smtp" : "resend"),
-    hasSmtpUser: Boolean(process.env.SMTP_USER?.trim()),
-    hasSmtpPass: Boolean(process.env.SMTP_PASS?.trim()),
-    hasResendKey: Boolean(process.env.RESEND_API_KEY?.trim()),
-    hasAppUrl: Boolean(process.env.APP_URL?.trim()),
-  };
 }
 
 function mapFirebaseAuthError(err: unknown): { status: number; error: string; message: string } {
@@ -271,10 +255,7 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
     } catch (err: unknown) {
       console.error("POST /api/email/send-document:", err);
       const message = err instanceof Error ? err.message : "Erro ao enviar e-mail.";
-      // #region agent log
-      fetch('http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8ececf'},body:JSON.stringify({sessionId:'8ececf',location:'server.ts:send-document',message:'email send failed',data:{errorMessage:message,debug:getRuntimeDebugSnapshot()},timestamp:Date.now(),hypothesisId:'H1-H2-H4-H5'})}).catch(()=>{});
-      // #endregion
-      return res.status(500).json({ error: "EMAIL_SEND_FAILED", message, _debug: getRuntimeDebugSnapshot() });
+      return res.status(500).json({ error: "EMAIL_SEND_FAILED", message });
     }
   });
 
@@ -468,34 +449,75 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
     }
   });
 
+  app.post("/api/shipping/download-label", async (req, res) => {
+    try {
+      try {
+        await verifyAdminToken(req.headers.authorization);
+      } catch {
+        return res.status(401).json({ error: "UNAUTHORIZED", message: "Token de autenticação inválido ou ausente." });
+      }
+
+      const { requestId } = req.body as { requestId?: string };
+      if (!requestId) {
+        return res.status(400).json({ error: "INVALID_BODY", message: "requestId é obrigatório." });
+      }
+
+      const docId = sanitizeRequestDocId(requestId);
+      const snap = await getAdminDb().collection("maintenance_requests").doc(docId).get();
+      if (!snap.exists) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "Ordem de serviço não encontrada." });
+      }
+
+      const request = { ...(snap.data() as MaintenanceRequest), id: snap.data()?.id || requestId };
+      if (!request.shippingLabel?.trackingCode) {
+        return res.status(404).json({
+          error: "LABEL_NOT_FOUND",
+          message: "Nenhuma etiqueta gerada para esta ordem de serviço.",
+        });
+      }
+
+      const endereco = await parseClientAddressWithCep(request);
+      const contractNumber = process.env.CORREIOS_CARTAO_POSTAGEM || process.env.CORREIOS_CONTRATO || "";
+      const zplContent = generateMaintenanceZpl({
+        request,
+        endereco,
+        trackingCode: request.shippingLabel.trackingCode,
+        contractNumber,
+      });
+
+      const safeName = (request.requestNumber || request.id).replace(/[^\w\-#]+/g, "_");
+      return res.json({
+        success: true,
+        trackingCode: request.shippingLabel.trackingCode,
+        zplContent,
+        fileName: `etiqueta_${safeName}.zpl`,
+      });
+    } catch (err: unknown) {
+      console.error("POST /api/shipping/download-label:", err);
+      const message = err instanceof Error ? err.message : "Erro ao baixar etiqueta.";
+      return res.status(500).json({ error: "SHIPPING_LABEL_DOWNLOAD_FAILED", message });
+    }
+  });
+
   app.get("/api/hub-entry-url", async (req, res) => {
-    const debug = getRuntimeDebugSnapshot();
     try {
       try {
         await verifyAdminToken(req.headers.authorization);
       } catch (authErr) {
         const authMessage = authErr instanceof Error ? authErr.message : "auth failed";
-        // #region agent log
-        fetch('http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8ececf'},body:JSON.stringify({sessionId:'8ececf',location:'server.ts:hub-entry-url',message:'verifyAdminToken failed',data:{authMessage,debug},timestamp:Date.now(),hypothesisId:'H2-H3'})}).catch(()=>{});
-        // #endregion
         return res.status(401).json({
           error: "UNAUTHORIZED",
           message: authMessage.includes("Firebase Admin")
             ? authMessage
             : "Token de autenticação inválido ou ausente.",
-          _debug: debug,
         });
       }
 
       const url = (process.env.HUB_TESTES_URL || "").trim().replace(/^["']|["']$/g, "");
       if (!url) {
-        // #region agent log
-        fetch('http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8ececf'},body:JSON.stringify({sessionId:'8ececf',location:'server.ts:hub-entry-url',message:'hub url missing',data:{debug},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
         return res.status(503).json({
           error: "HUB_NOT_CONFIGURED",
           message: "Hub de Testes não configurado (HUB_TESTES_URL).",
-          _debug: debug,
         });
       }
 
@@ -503,7 +525,7 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
     } catch (err: unknown) {
       console.error("GET /api/hub-entry-url:", err);
       const message = err instanceof Error ? err.message : "Erro ao obter URL do Hub de Testes.";
-      return res.status(500).json({ error: "HUB_ENTRY_FAILED", message, _debug: debug });
+      return res.status(500).json({ error: "HUB_ENTRY_FAILED", message });
     }
   });
 
@@ -818,6 +840,7 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
 
   // Serve static assets or mount Vite dev server
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
