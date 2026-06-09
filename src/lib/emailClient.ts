@@ -198,7 +198,7 @@ async function sendViaResend(params: SendEmailParams): Promise<SendEmailResult> 
   return { provider: "resend", messageId: data?.id };
 }
 
-async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   // #region agent log
   fetch('http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8ececf'},body:JSON.stringify({sessionId:'8ececf',location:'emailClient.ts:sendEmail',message:'sendEmail called',data:{provider:getActiveEmailProvider(),hasSmtpUser:Boolean(process.env.SMTP_USER),hasSmtpPass:Boolean(process.env.SMTP_PASS),hasResendKey:Boolean(process.env.RESEND_API_KEY),isVercel:Boolean(process.env.VERCEL)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
   // #endregion
