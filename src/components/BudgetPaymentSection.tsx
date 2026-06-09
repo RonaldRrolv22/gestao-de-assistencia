@@ -16,7 +16,7 @@ import {
 } from "../services/pagarmeApi";
 import { CheckCircle2 } from "lucide-react";
 import PaymentPanel from "./payment/PaymentPanel";
-import { isCardPaymentLinkCurrent } from "../utils/budgetPaymentSync";
+import { isCardPaymentLinkCurrent, isPixStillValid, mergeBudgetPaymentSnapshot } from "../utils/budgetPaymentSync";
 
 interface BudgetPaymentSectionProps {
   request: MaintenanceRequest;
@@ -73,20 +73,12 @@ export default function BudgetPaymentSection({
     if (!remote) return;
     setPayment((local) => {
       const liveCents = Math.round(totalFinalRef.current * 100);
-      if (
-        local?.status === "pending" &&
-        local.pixQrCode &&
-        local.amountCents === liveCents &&
-        remote.amountCents !== liveCents
-      ) {
-        return local;
-      }
-      return remote;
+      return mergeBudgetPaymentSnapshot(local, remote, liveCents, shipping);
     });
     if (remote.publicToken) {
       setPublicUrl(`${window.location.origin}/pagamento/${remote.publicToken}`);
     }
-  }, [request.budgetPayment, paymentOverride]);
+  }, [request.budgetPayment, paymentOverride, shipping, totalFinal]);
 
   const handleVerify = useCallback(async () => {
     setLoadingVerify(true);

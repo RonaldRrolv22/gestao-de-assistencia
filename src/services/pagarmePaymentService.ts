@@ -314,7 +314,7 @@ export async function createPixPayment(
 
 export async function createCardPaymentLink(
   requestId: string,
-  options?: { amountCents?: number }
+  options?: { amountCents?: number; forceRefresh?: boolean }
 ): Promise<BudgetPayment & { requestId: string }> {
   const { docId, data: req } = await loadRequestByDisplayId(requestId);
   if (req.budget?.isWarranty) {
@@ -322,6 +322,17 @@ export async function createCardPaymentLink(
   }
 
   const amountCents = resolveAmountCents(req, options?.amountCents);
+  const shipping = req.budget?.shipping ?? 0;
+  const existing = req.budgetPayment;
+
+  if (
+    !options?.forceRefresh &&
+    existing &&
+    isCardPaymentLinkCurrent(existing, amountCents, shipping)
+  ) {
+    return { ...existing, requestId: req.id };
+  }
+
   const installments = buildCardInstallments(amountCents);
   const customer = buildCustomer(await resolveCustomerProfile(req));
 
@@ -366,21 +377,21 @@ export async function createCardPaymentLink(
     );
   }
 
-  const existing = req.budgetPayment;
+  const existingPayment = req.budgetPayment;
   const payment: BudgetPayment = {
-    ...(existing || { status: "none", amountCents: 0 }),
+    ...(existingPayment || { status: "none", amountCents: 0 }),
     status: "pending",
     method: "credit_card",
     pagarmePaymentLinkId: link.id,
     paymentLinkUrl: link.url,
     amountCents,
     cardLinkAmountCents: amountCents,
-    pixAmountCents: existing?.pixAmountCents,
-    pagarmeOrderId: existing?.pagarmeOrderId,
-    pagarmeChargeId: existing?.pagarmeChargeId,
-    pixQrCode: existing?.pixQrCode,
-    pixQrCodeUrl: existing?.pixQrCodeUrl,
-    pixExpiresAt: existing?.pixExpiresAt,
+    pixAmountCents: existingPayment?.pixAmountCents,
+    pagarmeOrderId: existingPayment?.pagarmeOrderId,
+    pagarmeChargeId: existingPayment?.pagarmeChargeId,
+    pixQrCode: existingPayment?.pixQrCode,
+    pixQrCodeUrl: existingPayment?.pixQrCodeUrl,
+    pixExpiresAt: existingPayment?.pixExpiresAt,
   };
 
   await saveBudgetPayment(docId, payment);

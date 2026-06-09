@@ -24,7 +24,7 @@ import { formatCurrency, formatDate } from "../utils";
 import { downloadHtmlAsPdf } from "../utils/pdfExport";
 import { buildBudgetCommercialHtml, buildFreteSummaryLabel, resolveBudgetPdfPaymentInfo } from "../utils/budgetCommercialPdf";
 import { generateCardLink, generatePixPayment } from "../services/pagarmeApi";
-import { isCardPaymentLinkCurrent, isPixStillValid } from "../utils/budgetPaymentSync";
+import { isCardPaymentLinkCurrent, isPixStillValid, mergeBudgetPaymentSnapshot } from "../utils/budgetPaymentSync";
 import BudgetCommercialPaymentBlock from "./budget/BudgetCommercialPaymentBlock";
 import BudgetPaymentSection from "./BudgetPaymentSection";
 import { formatRequestDisplayId } from "../services/requestIds";
@@ -125,24 +125,15 @@ export default function BudgetModal({
   useEffect(() => {
     const remote = request.budgetPayment;
     if (!remote) return;
-    setPaymentSnapshot((prev) => {
-      if (remote.status === "paid") return remote;
-      if (!prev) return remote;
-      return {
-        ...remote,
-        pixQrCode: remote.pixQrCode || prev.pixQrCode,
-        pixQrCodeUrl: remote.pixQrCodeUrl || prev.pixQrCodeUrl,
-        pixExpiresAt: remote.pixExpiresAt || prev.pixExpiresAt,
-        pagarmeOrderId: remote.pagarmeOrderId || prev.pagarmeOrderId,
-        pagarmeChargeId: remote.pagarmeChargeId || prev.pagarmeChargeId,
-        paymentLinkUrl: remote.paymentLinkUrl || prev.paymentLinkUrl,
-        pagarmePaymentLinkId: remote.pagarmePaymentLinkId || prev.pagarmePaymentLinkId,
-        status: remote.status === "paid" ? "paid" : prev.status === "paid" ? "paid" : remote.status === "pending" ? "pending" : prev.status,
-      };
-    });
-  }, [request.budgetPayment]);
+    const liveAmountCents = Math.round(calculatedTotalRef.current * 100);
+    setPaymentSnapshot((prev) => mergeBudgetPaymentSnapshot(prev, remote, liveAmountCents, shipping));
+  }, [request.budgetPayment, shipping]);
 
   const autoPaymentRequestedRef = useRef<string>("");
+
+  useEffect(() => {
+    autoPaymentRequestedRef.current = "";
+  }, [discount, calculatedTotal]);
 
   // Catalog selectors helper
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -246,40 +237,61 @@ export default function BudgetModal({
       setAutoCardError(null);
       setAutoPixError(null);
 
-      const tasks: Promise<void>[] = [];
+      try {
+        await onSaveBudget(request.id, {
+          isWarranty,
+          products: budgetProducts,
+          services: budgetServices,
+          discount: finalDiscount,
+          shipping,
+          shippingService,
+          subtotal: calculatedSubtotal,
+          totalFinal: calculatedTotalRef.current,
+          isApproved: request.budget?.isApproved || false,
+          approvedDate: request.budget?.approvedDate,
+        });
+      } catch (err) {
+        autoPaymentRequestedRef.current = "";
+        setAutoCardError(err instanceof Error ? err.message : "Erro ao salvar orçamento antes do pagamento.");
+        setAutoCardLoading(false);
+        setAutoPixLoading(false);
+        return;
+      }
+
       const pixForceRefresh = !!(latest?.pixQrCode && !isPixStillValid(latest, liveAmountCents));
+      let workingSnapshot = latest;
 
       if (stillNeedsCard) {
-        tasks.push(
-          generateCardLink(request.id, liveAmountCents)
-            .then((result) => {
-              autoPaymentRequestedRef.current = "";
-              setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result }));
-            })
-            .catch((err) => {
-              autoPaymentRequestedRef.current = "";
-              setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
-            })
-            .finally(() => setAutoCardLoading(false))
-        );
+        try {
+          const cardResult = await generateCardLink(request.id, liveAmountCents);
+          workingSnapshot = mergeBudgetPaymentSnapshot(workingSnapshot, cardResult, liveAmountCents, shipping);
+          setPaymentSnapshot(workingSnapshot);
+        } catch (err) {
+          autoPaymentRequestedRef.current = "";
+          setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
+        } finally {
+          setAutoCardLoading(false);
+        }
+      } else {
+        setAutoCardLoading(false);
       }
 
-      if (stillNeedsPix) {
-        tasks.push(
-          generatePixPayment(request.id, pixForceRefresh, liveAmountCents)
-            .then((result) => {
-              autoPaymentRequestedRef.current = "";
-              setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result }));
-            })
-            .catch((err) => {
-              autoPaymentRequestedRef.current = "";
-              setAutoPixError(err instanceof Error ? err.message : "Erro ao gerar PIX.");
-            })
-            .finally(() => setAutoPixLoading(false))
-        );
+      if (!workingSnapshot?.pixQrCode || !isPixStillValid(workingSnapshot, liveAmountCents)) {
+        try {
+          const pixResult = await generatePixPayment(request.id, pixForceRefresh, liveAmountCents);
+          workingSnapshot = mergeBudgetPaymentSnapshot(workingSnapshot, pixResult, liveAmountCents, shipping);
+          setPaymentSnapshot(workingSnapshot);
+        } catch (err) {
+          autoPaymentRequestedRef.current = "";
+          setAutoPixError(err instanceof Error ? err.message : "Erro ao gerar PIX.");
+        } finally {
+          setAutoPixLoading(false);
+        }
+      } else {
+        setAutoPixLoading(false);
       }
 
-      await Promise.all(tasks);
+      autoPaymentRequestedRef.current = "";
     }, 800);
 
     return () => clearTimeout(timer);
