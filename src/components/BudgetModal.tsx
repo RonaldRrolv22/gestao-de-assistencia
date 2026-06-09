@@ -47,7 +47,7 @@ interface BudgetModalProps {
   productsCatalog: ProductCatalog[];
   servicesCatalog: ServiceCatalog[];
   onSaveBudget: (requestId: string, budget: Budget) => void | Promise<void>;
-  onApproveBudget: (requestId: string) => void;
+  onApproveBudget: (requestId: string, budget?: Budget) => void | Promise<void>;
   onRejectBudget: (requestId: string) => void;
   onClose: () => void;
   canEdit: boolean;
@@ -104,6 +104,7 @@ export default function BudgetModal({
   const [errorLocal, setErrorLocal] = useState("");
   const [showSaveDraftConfirm, setShowSaveDraftConfirm] = useState(false);
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [approvingWarranty, setApprovingWarranty] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [showSendEmailConfirm, setShowSendEmailConfirm] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -390,8 +391,7 @@ export default function BudgetModal({
     return onSaveBudget(request.id, budgetData);
   };
 
-  const handleApproveAction = () => {
-    // Save first to push current values
+  const handleApproveAction = async () => {
     const budgetData: Budget = {
       isWarranty,
       products: budgetProducts,
@@ -402,11 +402,20 @@ export default function BudgetModal({
       subtotal: calculatedSubtotal,
       totalFinal: calculatedTotal,
       isApproved: true,
-      approvedDate: new Date().toISOString()
+      approvedDate: new Date().toISOString(),
     };
-    onSaveBudget(request.id, budgetData);
-    onApproveBudget(request.id);
-    onClose();
+
+    setApprovingWarranty(true);
+    try {
+      await onSaveBudget(request.id, budgetData);
+      await onApproveBudget(request.id, budgetData);
+      setShowApproveConfirm(false);
+      onClose();
+    } catch (err) {
+      appNoticeError(err instanceof Error ? err.message : "Erro ao aprovar orçamento em garantia.");
+    } finally {
+      setApprovingWarranty(false);
+    }
   };
 
   const handleCalculateShipping = useCallback(async (cepOverride?: string) => {
@@ -899,15 +908,16 @@ export default function BudgetModal({
       <ConfirmDialog
         open={showApproveConfirm}
         title="Aprovar Orçamento Técnico?"
-        description={`Esta ação aprovará o orçamento no valor de ${formatCurrency(calculatedTotal)} e moverá a O.S. para Em Manutenção.`}
-        confirmLabel="Confirmar e Iniciar Manutenção"
+        description={
+          isWarranty
+            ? "Esta ação aprovará o orçamento sob garantia técnica (sem cobrança) e moverá a O.S. para Em Manutenção."
+            : `Esta ação aprovará o orçamento no valor de ${formatCurrency(calculatedTotal)} e moverá a O.S. para Em Manutenção.`
+        }
+        confirmLabel={approvingWarranty ? "Aprovando..." : "Confirmar e Iniciar Manutenção"}
         confirmVariant="primary"
         icon={<CheckCircle2 className="h-5 w-5 text-success" />}
-        onCancel={() => setShowApproveConfirm(false)}
-        onConfirm={() => {
-          handleApproveAction();
-          setShowApproveConfirm(false);
-        }}
+        onCancel={() => !approvingWarranty && setShowApproveConfirm(false)}
+        onConfirm={() => void handleApproveAction()}
       />
 
       <ConfirmDialog

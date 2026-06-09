@@ -252,13 +252,36 @@ function AppShell() {
     }
   };
 
-  const handleApproveBudget = async (requestId: string) => {
+  const handleApproveBudget = async (requestId: string, budgetOverride?: Budget) => {
     const req = requests.find((r) => r.id === requestId);
     if (!req) return;
 
-    if (req.budget && !req.budget.isWarranty) {
+    const budget = budgetOverride ?? req.budget;
+
+    // #region agent log
+    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+      body: JSON.stringify({
+        sessionId: "8ececf",
+        runId: "warranty-fix",
+        hypothesisId: "warranty-race",
+        location: "App.tsx:handleApproveBudget",
+        message: "Approve budget invoked",
+        data: {
+          requestId,
+          overrideIsWarranty: budgetOverride?.isWarranty ?? null,
+          storedIsWarranty: req.budget?.isWarranty ?? null,
+          effectiveIsWarranty: budget?.isWarranty ?? null,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
+    if (budget && !budget.isWarranty) {
       appNoticeWarning("Orçamentos particulares só avançam após pagamento confirmado via Pagar.me.");
-      return;
+      throw new Error("Orçamento particular exige pagamento confirmado.");
     }
 
     const log = {
@@ -273,8 +296,8 @@ function AppShell() {
     const updated: MaintenanceRequest = {
       ...req,
       columnId: "manutencao",
-      budget: req.budget
-        ? { ...req.budget, isApproved: true, approvedDate: new Date().toISOString() }
+      budget: budget
+        ? { ...budget, isApproved: true, approvedDate: new Date().toISOString() }
         : undefined,
       movementHistory: [...req.movementHistory, log],
       rat: req.rat || {
