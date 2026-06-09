@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { AlertCircle, CreditCard, QrCode, Loader2 } from "lucide-react";
+import { AlertCircle, Copy, CreditCard, QrCode, Loader2 } from "lucide-react";
 import { BudgetPayment } from "../../types";
 import { formatCurrency } from "../../utils";
 import SummaryCard from "../ui/SummaryCard";
@@ -72,20 +72,16 @@ export default function PaymentPanel({
       onRefreshPix();
       return;
     }
-    if (hasPix && payment?.pixQrCode) {
-      onCopy(payment.pixQrCode);
-      return;
+    if (!hasPix) {
+      onGeneratePix();
     }
-    onGeneratePix();
   };
 
   const handleCardClick = () => {
     setSelectedMethod("card");
-    if (hasCard && payment?.paymentLinkUrl) {
-      window.open(payment.paymentLinkUrl, "_blank", "noopener,noreferrer");
-      return;
+    if (!hasCard) {
+      onGenerateCard();
     }
-    onGenerateCard();
   };
 
   return (
@@ -152,13 +148,60 @@ export default function PaymentPanel({
           </button>
         </div>
 
-        {selectedMethod === "pix" && hasPix && payment?.pixQrCodeUrl && !pixAmountMismatch && (
-          <div className="flex justify-center pt-1">
-            <img
-              src={payment.pixQrCodeUrl}
-              alt="QR Code PIX"
-              className="max-w-[180px] w-full rounded-xl border border-emerald-200 shadow-sm"
-            />
+        {selectedMethod === "pix" && hasPix && !pixAmountMismatch && (
+          <div className="space-y-3 pt-1">
+            {payment?.pixQrCodeUrl && (
+              <div className="flex justify-center">
+                <img
+                  src={payment.pixQrCodeUrl}
+                  alt="QR Code PIX"
+                  className="max-w-[180px] w-full rounded-xl border border-emerald-200 shadow-sm"
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                Código copia e cola
+              </label>
+              <div className="flex gap-2">
+                <input
+                  readOnly
+                  value={payment?.pixQrCode || ""}
+                  className="flex-1 text-xs font-mono border border-slate-200 rounded-xl p-3 bg-slate-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => onCopy(payment?.pixQrCode || "")}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 shrink-0"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedMethod === "card" && hasCard && payment?.paymentLinkUrl && (
+          <div className="space-y-2 pt-1">
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Link de pagamento
+            </label>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={payment.paymentLinkUrl}
+                className="flex-1 text-xs font-mono border border-slate-200 rounded-xl p-3 bg-slate-50"
+              />
+              <button
+                type="button"
+                onClick={() => onCopy(payment.paymentLinkUrl || "")}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 shrink-0"
+              >
+                <Copy className="h-4 w-4" />
+                Copiar
+              </button>
+            </div>
           </div>
         )}
       </div>
