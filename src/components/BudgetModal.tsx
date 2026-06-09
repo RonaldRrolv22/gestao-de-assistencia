@@ -121,8 +121,26 @@ export default function BudgetModal({
   const calculatedTotalRef = useRef(0);
 
   useEffect(() => {
-    setPaymentSnapshot(request.budgetPayment);
+    const remote = request.budgetPayment;
+    if (!remote) return;
+    setPaymentSnapshot((prev) => {
+      if (remote.status === "paid") return remote;
+      if (!prev) return remote;
+      return {
+        ...remote,
+        pixQrCode: remote.pixQrCode || prev.pixQrCode,
+        pixQrCodeUrl: remote.pixQrCodeUrl || prev.pixQrCodeUrl,
+        pixExpiresAt: remote.pixExpiresAt || prev.pixExpiresAt,
+        pagarmeOrderId: remote.pagarmeOrderId || prev.pagarmeOrderId,
+        pagarmeChargeId: remote.pagarmeChargeId || prev.pagarmeChargeId,
+        paymentLinkUrl: remote.paymentLinkUrl || prev.paymentLinkUrl,
+        pagarmePaymentLinkId: remote.pagarmePaymentLinkId || prev.pagarmePaymentLinkId,
+        status: remote.status === "paid" ? "paid" : prev.status === "paid" ? "paid" : remote.status === "pending" ? "pending" : prev.status,
+      };
+    });
   }, [request.budgetPayment]);
+
+  const autoPaymentRequestedRef = useRef<string>("");
 
   // Catalog selectors helper
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -188,43 +206,49 @@ export default function BudgetModal({
     if (budgetProducts.length === 0 && budgetServices.length === 0) return;
     if (paymentSnapshotRef.current?.status === "paid") return;
 
+    const current = paymentSnapshotRef.current;
+    const needsCard = !current?.paymentLinkUrl;
+    const needsPix = !current?.pixQrCode;
+    if (!needsCard && !needsPix) return;
+
+    const attemptKey = `${request.id}:${shipping}:${needsCard}:${needsPix}`;
+    if (autoPaymentRequestedRef.current === attemptKey) return;
+    autoPaymentRequestedRef.current = attemptKey;
+
     const timer = setTimeout(async () => {
       const amountCents = Math.round(calculatedTotalRef.current * 100);
-      const current = paymentSnapshotRef.current;
-      const cardCurrent =
-        current?.paymentLinkUrl &&
-        current.amountCents === amountCents;
-      const pixCurrent =
-        current?.pixQrCode &&
-        current.amountCents === amountCents;
+      const latest = paymentSnapshotRef.current;
+      const stillNeedsCard = !latest?.paymentLinkUrl;
+      const stillNeedsPix = !latest?.pixQrCode;
+      if (!stillNeedsCard && !stillNeedsPix) return;
 
-      if (cardCurrent && pixCurrent) return;
-
-      setAutoCardLoading(!cardCurrent);
-      setAutoPixLoading(!pixCurrent);
+      setAutoCardLoading(stillNeedsCard);
+      setAutoPixLoading(stillNeedsPix);
       setAutoCardError(null);
       setAutoPixError(null);
 
       const tasks: Promise<void>[] = [];
 
-      if (!cardCurrent) {
+      if (stillNeedsCard) {
         tasks.push(
           generateCardLink(request.id, amountCents)
-            .then((result) => setPaymentSnapshot((prev) => ({ ...prev, ...result })))
-            .catch((err) =>
-              setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.")
-            )
+            .then((result) => setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result })))
+            .catch((err) => {
+              autoPaymentRequestedRef.current = "";
+              setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
+            })
             .finally(() => setAutoCardLoading(false))
         );
       }
 
-      if (!pixCurrent) {
+      if (stillNeedsPix) {
         tasks.push(
           generatePixPayment(request.id, false, amountCents)
-            .then((result) => setPaymentSnapshot((prev) => ({ ...prev, ...result })))
-            .catch((err) =>
-              setAutoPixError(err instanceof Error ? err.message : "Erro ao gerar PIX.")
-            )
+            .then((result) => setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result })))
+            .catch((err) => {
+              autoPaymentRequestedRef.current = "";
+              setAutoPixError(err instanceof Error ? err.message : "Erro ao gerar PIX.");
+            })
             .finally(() => setAutoPixLoading(false))
         );
       }
@@ -235,12 +259,13 @@ export default function BudgetModal({
     return () => clearTimeout(timer);
   }, [
     shipping,
-    calculatedTotal,
     isWarranty,
     budgetProducts.length,
     budgetServices.length,
     request.id,
     request.columnId,
+    paymentSnapshot?.pixQrCode,
+    paymentSnapshot?.paymentLinkUrl,
   ]);
 
   // Handle adding product item

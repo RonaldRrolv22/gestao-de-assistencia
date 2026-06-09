@@ -133,9 +133,10 @@ export default function PaymentPanel({
         {message && (
           <div className="text-slate-700 bg-slate-100 border border-slate-200 rounded-xl p-3.5 text-xs">{message}</div>
         )}
-        {pixAmountMismatch && syncingPix && (
+        {pixAmountMismatch && !syncingPix && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs">
-            Sincronizando PIX: {formatCurrency(pixAmountCents / 100)} → {formatCurrency(totalFinal)}
+            O valor do orçamento mudou ({formatCurrency(pixAmountCents / 100)} → {formatCurrency(totalFinal)}).
+            Clique em &quot;Atualizar PIX&quot; para gerar um novo código.
           </div>
         )}
 

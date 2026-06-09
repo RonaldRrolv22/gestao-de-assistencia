@@ -85,8 +85,7 @@ export default function BudgetPaymentSection({
     if (remote.publicToken) {
       setPublicUrl(`${window.location.origin}/pagamento/${remote.publicToken}`);
     }
-    onPaymentChange?.(remote);
-  }, [request.budgetPayment, onPaymentChange, paymentOverride]);
+  }, [request.budgetPayment, paymentOverride]);
 
   const handleVerify = useCallback(async () => {
     setLoadingVerify(true);
@@ -105,6 +104,9 @@ export default function BudgetPaymentSection({
         onPaid?.();
       } else {
         setPayment((p) => {
+          if (result.status === "expired" && p?.pixQrCode && p.status === "pending") {
+            return p;
+          }
           const next = p ? { ...p, status: result.status } : p;
           if (next) onPaymentChange?.(next);
           return next;
@@ -169,34 +171,6 @@ export default function BudgetPaymentSection({
     !!payment?.pixQrCode &&
     liveAmountCents > 0 &&
     pixAmountCents !== liveAmountCents;
-
-  useEffect(() => {
-    if (compact || request.budget?.isWarranty) return;
-
-    const newCents = Math.round(totalFinal * 100);
-    if (newCents <= 0) return;
-    if (!payment?.pixQrCode || payment.status !== "pending") return;
-    if (payment.amountCents === newCents) return;
-
-    setSyncingPix(true);
-    const timer = setTimeout(() => {
-      const latestCents = Math.round(totalFinalRef.current * 100);
-      handlePix(true, latestCents);
-    }, 500);
-
-    return () => {
-      clearTimeout(timer);
-      setSyncingPix(false);
-    };
-  }, [
-    totalFinal,
-    payment?.amountCents,
-    payment?.pixQrCode,
-    payment?.status,
-    compact,
-    request.budget?.isWarranty,
-    handlePix,
-  ]);
 
   const handleCard = async () => {
     const amountCents = Math.round(totalFinalRef.current * 100);
@@ -268,7 +242,7 @@ export default function BudgetPaymentSection({
       syncingPix={syncingPix || loadingPix}
       pixAmountMismatch={pixAmountMismatch}
       pixAmountCents={pixAmountCents}
-      pixExpired={pixExpired || payment?.status === "expired"}
+      pixExpired={pixExpired}
       loadingPix={loadingPix}
       loadingCard={combinedLoadingCard}
       loadingVerify={loadingVerify}

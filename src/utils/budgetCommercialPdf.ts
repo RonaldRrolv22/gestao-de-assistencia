@@ -56,7 +56,8 @@ export function resolveBudgetPdfPaymentInfo(
   };
 }
 
-function escapeHtml(text: string): string {
+function escapeHtml(text: string | undefined | null): string {
+  if (!text) return "";
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -238,7 +239,7 @@ export function buildBudgetCommercialHtml(params: BudgetCommercialPdfParams): st
     .map(
       (p) => `
       <tr>
-        <td>${escapeHtml(p.name)}</td>
+        <td>${escapeHtml(p.description)}</td>
         <td class="text-center">${p.quantity}</td>
         <td class="text-right">${fmt(p.unitValue)}</td>
         <td class="text-right">${fmt(p.totalValue)}</td>
@@ -250,7 +251,7 @@ export function buildBudgetCommercialHtml(params: BudgetCommercialPdfParams): st
     .map(
       (s) => `
       <tr>
-        <td>${escapeHtml(s.name)}</td>
+        <td>${escapeHtml(s.description)}</td>
         <td class="text-center">${s.quantity}</td>
         <td class="text-right">${fmt(s.unitValue)}</td>
         <td class="text-right">${fmt(s.totalValue)}</td>

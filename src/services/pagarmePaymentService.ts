@@ -592,7 +592,7 @@ async function resolveRemotePaymentStatus(
     if (link.status === "paid" || link.order?.status === "paid") {
       return { status: "paid", orderId: link.order?.id || orderId };
     }
-    if (link.status === "expired" && status === "pending") {
+    if (link.status === "expired" && status === "pending" && !payment.pixQrCode) {
       status = "expired";
     }
   }
@@ -621,14 +621,27 @@ export async function checkPaymentStatus(requestId: string): Promise<{
     payment.pagarmeOrderId = orderId;
   }
 
-  if (remoteStatus === "paid") {
+  let effectiveStatus = remoteStatus;
+  if (
+    remoteStatus === "expired" &&
+    payment.pixQrCode &&
+    isPixStillValid(payment, payment.amountCents)
+  ) {
+    effectiveStatus = "pending";
+  }
+
+  if (effectiveStatus === "paid") {
     const updated = await markRequestPaid(docId, req);
     return { status: "paid", request: updated, paid: true };
   }
 
-  const updatedPayment: BudgetPayment = { ...payment, status: remoteStatus };
-  await saveBudgetPayment(docId, updatedPayment);
-  return { status: remoteStatus, request: { ...req, budgetPayment: updatedPayment }, paid: false };
+  if (effectiveStatus !== payment.status) {
+    const updatedPayment: BudgetPayment = { ...payment, status: effectiveStatus };
+    await saveBudgetPayment(docId, updatedPayment);
+    return { status: effectiveStatus, request: { ...req, budgetPayment: updatedPayment }, paid: false };
+  }
+
+  return { status: payment.status, request: req, paid: false };
 }
 
 export async function forceConfirmPaymentForTest(requestId: string): Promise<RequestDoc> {
