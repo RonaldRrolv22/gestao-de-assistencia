@@ -21,7 +21,9 @@ interface KanbanColumnProps {
   onDeleteCard?: (req: MaintenanceRequest) => void;
   onRejectBudget?: (req: MaintenanceRequest) => void;
   onGenerateShippingLabel?: (req: MaintenanceRequest) => void;
+  onDownloadShippingLabel?: (req: MaintenanceRequest) => void;
   shippingLabelLoadingId?: string | null;
+  shippingLabelDownloadLoadingId?: string | null;
 }
 
 export default function KanbanColumn({
@@ -35,7 +37,9 @@ export default function KanbanColumn({
   onDeleteCard,
   onRejectBudget,
   onGenerateShippingLabel,
+  onDownloadShippingLabel,
   shippingLabelLoadingId,
+  shippingLabelDownloadLoadingId,
 }: KanbanColumnProps) {
   const isOrcamentoColumn = config.id === "orcamento";
   const isLiberadoColumn = config.id === "liberado";
@@ -109,7 +113,13 @@ export default function KanbanColumn({
                       ? () => onGenerateShippingLabel(req)
                       : undefined
                   }
+                  onDownloadShippingLabel={
+                    isLiberadoColumn && onDownloadShippingLabel && req.shippingLabel?.trackingCode
+                      ? () => onDownloadShippingLabel(req)
+                      : undefined
+                  }
                   isGeneratingShippingLabel={shippingLabelLoadingId === req.id}
+                  isDownloadingShippingLabel={shippingLabelDownloadLoadingId === req.id}
                 />
               ))}
             </div>

@@ -41,6 +41,10 @@ import { canMoveToOrcamento, isAdminProfile } from "../services/userRoles";
 import { triggerMaintenanceStartedEmail } from "../services/documentEmailApi";
 import { verifyCurrentUserPassword } from "../services/authService";
 import { isBudgetRejected, isRejectedVisibleInOrcamento } from "../utils/rejectedBudget";
+import {
+  compareReleasedDesc,
+  isLiberadoVisibleInKanban,
+} from "../utils/liberadoKanbanVisibility";
 import KanbanColumn from "./kanban/KanbanColumn";
 import { KANBAN_COLUMNS } from "./kanban/kanbanConfig";
 import PasswordConfirmDialog from "./ui/PasswordConfirmDialog";
@@ -70,7 +74,9 @@ interface KanbanBoardProps {
   onOpenRat: (req: MaintenanceRequest) => void;
   onRejectBudget: (requestId: string) => void | Promise<void>;
   onGenerateShippingLabel?: (requestId: string) => void | Promise<void>;
+  onDownloadShippingLabel?: (requestId: string) => void | Promise<void>;
   shippingLabelLoadingId?: string | null;
+  shippingLabelDownloadLoadingId?: string | null;
   searchTerm: string;
   equipmentFilter: string;
   onSearchChange: (value: string) => void;
@@ -96,7 +102,9 @@ export default function KanbanBoard({
   onOpenRat,
   onRejectBudget,
   onGenerateShippingLabel,
+  onDownloadShippingLabel,
   shippingLabelLoadingId,
+  shippingLabelDownloadLoadingId,
   searchTerm,
   equipmentFilter,
   onSearchChange,
@@ -414,6 +422,9 @@ export default function KanbanBoard({
         }
         return inOrcamento;
       }
+      if (colId === "liberado") {
+        return req.columnId === "liberado" && isLiberadoVisibleInKanban(req);
+      }
       return req.columnId === colId;
     });
     if (colId === "manutencao") {
@@ -422,6 +433,9 @@ export default function KanbanBoard({
         const bFin = b.rat?.status === "Finalizado" ? 1 : 0;
         return bFin - aFin;
       });
+    }
+    if (colId === "liberado") {
+      return [...colRequests].sort(compareReleasedDesc);
     }
     return colRequests;
   };
@@ -477,7 +491,13 @@ export default function KanbanBoard({
                   ? (req) => onGenerateShippingLabel(req.id)
                   : undefined
               }
+              onDownloadShippingLabel={
+                col.id === "liberado" && onDownloadShippingLabel
+                  ? (req) => onDownloadShippingLabel(req.id)
+                  : undefined
+              }
               shippingLabelLoadingId={shippingLabelLoadingId}
+              shippingLabelDownloadLoadingId={shippingLabelDownloadLoadingId}
             />
           ))}
         </div>

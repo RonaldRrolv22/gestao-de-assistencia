@@ -33,7 +33,7 @@ import {
   triggerRatFinalizedEmail,
   triggerTrackingEmail,
 } from "./services/documentEmailApi";
-import { generateShippingLabel } from "./services/shippingLabelApi";
+import { generateShippingLabel, downloadShippingLabelZpl } from "./services/shippingLabelApi";
 import { openHubTestes } from "./services/hubTestesApi";
 import {
   appNoticeError,
@@ -388,6 +388,7 @@ function AppShell() {
   };
 
   const [shippingLabelLoadingId, setShippingLabelLoadingId] = useState<string | null>(null);
+  const [shippingLabelDownloadLoadingId, setShippingLabelDownloadLoadingId] = useState<string | null>(null);
   const [trackingEmailResendLoadingId, setTrackingEmailResendLoadingId] = useState<string | null>(null);
 
   const handleResendTrackingEmail = async (requestId: string) => {
@@ -453,6 +454,19 @@ function AppShell() {
       appNoticeError(message);
     } finally {
       setShippingLabelLoadingId(null);
+    }
+  };
+
+  const handleDownloadShippingLabel = async (requestId: string) => {
+    setShippingLabelDownloadLoadingId(requestId);
+    try {
+      await downloadShippingLabelZpl(requestId);
+      appNoticeSuccess("Etiqueta baixada com sucesso.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao baixar etiqueta.";
+      appNoticeError(message);
+    } finally {
+      setShippingLabelDownloadLoadingId(null);
     }
   };
 
@@ -631,7 +645,9 @@ function AppShell() {
             }}
             onRejectBudget={handleRejectBudget}
             onGenerateShippingLabel={handleGenerateShippingLabel}
+            onDownloadShippingLabel={handleDownloadShippingLabel}
             shippingLabelLoadingId={shippingLabelLoadingId}
+            shippingLabelDownloadLoadingId={shippingLabelDownloadLoadingId}
             searchTerm={kanbanSearchTerm}
             equipmentFilter={kanbanEquipmentFilter}
             onSearchChange={setKanbanSearchTerm}

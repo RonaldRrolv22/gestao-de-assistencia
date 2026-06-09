@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { Calendar, Cpu, Package, Loader2 } from "lucide-react";
+import { Calendar, Cpu, Package, Loader2, Download } from "lucide-react";
 import { MaintenanceRequest } from "../../types";
 import { formatDate } from "../../utils";
 import { formatRequestDisplayId } from "../../services/requestIds";
@@ -19,7 +19,9 @@ interface ServiceOrderCardProps {
   onDelete?: () => void;
   onRejectBudget?: () => void;
   onGenerateShippingLabel?: () => void;
+  onDownloadShippingLabel?: () => void;
   isGeneratingShippingLabel?: boolean;
+  isDownloadingShippingLabel?: boolean;
 }
 
 export default function ServiceOrderCard({
@@ -29,14 +31,16 @@ export default function ServiceOrderCard({
   onDelete,
   onRejectBudget,
   onGenerateShippingLabel,
+  onDownloadShippingLabel,
   isGeneratingShippingLabel = false,
+  isDownloadingShippingLabel = false,
 }: ServiceOrderCardProps) {
   const isOrcamento = req.columnId === "orcamento" || req.columnId === "recusado";
   const isLiberado = req.columnId === "liberado";
   const rejected = isBudgetRejected(req);
   const showActions = isOrcamento && (onDelete || onRejectBudget);
   const hasShippingLabel = Boolean(req.shippingLabel?.trackingCode);
-  const showShippingAction = isLiberado && onGenerateShippingLabel;
+  const showShippingAction = isLiberado && (onGenerateShippingLabel || onDownloadShippingLabel);
 
   return (
     <article
@@ -100,10 +104,27 @@ export default function ServiceOrderCard({
           onClick={(e) => e.stopPropagation()}
         >
           {hasShippingLabel ? (
-            <div className="text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200/70 rounded-lg px-2.5 py-2">
-              Rastreio: {req.shippingLabel?.trackingCode}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0 text-[10px] font-mono text-emerald-700 bg-emerald-50 border border-emerald-200/70 rounded-lg px-2.5 py-2 truncate">
+                Rastreio: {req.shippingLabel?.trackingCode}
+              </div>
+              {onDownloadShippingLabel && (
+                <button
+                  type="button"
+                  title="Baixar etiqueta novamente"
+                  disabled={isDownloadingShippingLabel}
+                  onClick={onDownloadShippingLabel}
+                  className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg border border-orange-200/80 bg-orange-50 text-brand-orange hover:bg-orange-100 transition-colors disabled:opacity-60"
+                >
+                  {isDownloadingShippingLabel ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                </button>
+              )}
             </div>
-          ) : (
+          ) : onGenerateShippingLabel ? (
             <button
               type="button"
               disabled={isGeneratingShippingLabel}
@@ -117,7 +138,7 @@ export default function ServiceOrderCard({
               )}
               <span>{isGeneratingShippingLabel ? "Gerando..." : "Gerar etiquetas"}</span>
             </button>
-          )}
+          ) : null}
         </div>
       )}
     </article>

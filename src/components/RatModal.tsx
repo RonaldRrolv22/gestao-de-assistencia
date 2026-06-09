@@ -275,6 +275,7 @@ export default function RatModal({
   };
 
   const confirmFinalize = async () => {
+    setShowFinalizeConfirm(false);
     setSavingRat(true);
     try {
       const payload = getRatPayload("Finalizado");
@@ -406,6 +407,7 @@ export default function RatModal({
   };
 
   const confirmSaveDraft = async () => {
+    setShowSaveDraftConfirm(false);
     setSavingRat(true);
     try {
       const payload = getRatPayload("Rascunho");
@@ -421,8 +423,8 @@ export default function RatModal({
   return (
     <>
       {savingRat && (
-        <div className="fixed inset-0 z-[60] bg-white/75 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-brand-orange" />
+        <div className="fixed inset-0 z-[70] bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 animate-fade-in">
+          <Loader2 className="h-9 w-9 animate-spin text-brand-orange" />
           <p className="text-sm font-semibold text-slate-700">Salvando RAT...</p>
         </div>
       )}
@@ -1591,17 +1593,20 @@ export default function RatModal({
 
       {/* SAVE DRAFT CONFIRMATION MODAL */}
       {showSaveDraftConfirm && (
-        <div id="save-draft-confirm-backdrop" className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-55 animate-fade-in text-xs text-slate-750">
+        <div id="save-draft-confirm-backdrop" className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[65] animate-fade-in text-xs text-slate-750">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl border border-slate-200 overflow-hidden text-center p-6 space-y-4">
-            <div className="mx-auto h-12 w-12 bg-sky-50 text-sky-600 rounded-full flex items-center justify-center border border-sky-100">
-              <ClipboardCheck className="h-6 w-6 animate-pulse" />
+            <div className="mx-auto h-12 w-12 bg-orange-50 text-brand-orange rounded-full flex items-center justify-center border border-orange-200/70">
+              <ClipboardCheck className="h-6 w-6" />
             </div>
             
-            <div className="space-y-2">
+            <div className="space-y-3">
               <h3 className="font-bold text-base text-slate-900">Salvar Rascunho do Relatório</h3>
               <p className="text-slate-500 leading-relaxed text-[11.5px]">
-                Você deseja salvar o rascunho atual da O.S. <strong className="font-mono text-sky-600 font-bold bg-sky-50 px-1.5 py-0.5 rounded text-[10.5px] border border-sky-105">{request.id}</strong>?
+                Você deseja salvar o rascunho atual da O.S.
               </p>
+              <span className="inline-block max-w-full font-mono text-brand-orange font-semibold bg-orange-50 px-3 py-1.5 rounded-lg text-xs border border-orange-200/70 whitespace-nowrap">
+                {formatRequestDisplayId(request.id, request.columnId)}
+              </span>
               <p className="text-slate-400 text-[10.5px]">
                 O progresso será mantido para futuras edições.
               </p>
