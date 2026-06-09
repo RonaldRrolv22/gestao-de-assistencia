@@ -11,6 +11,7 @@ import {
   checkPaymentStatus,
   createPublicPaymentToken,
   getPublicPaymentSummary,
+  loadRequestByPublicToken,
   createPixPaymentByToken,
   createCardPaymentLinkByToken,
   checkPaymentStatusByToken,
@@ -25,6 +26,10 @@ import {
   isLikelyJwtAccessToken,
 } from "./src/lib/melhorEnvioClient";
 import { syncCatalogToFirestore } from "./src/lib/catalogSyncService";
+import {
+  buildPixCopyErrorHtml,
+  buildPixCopyPageHtml,
+} from "./src/lib/pixCopyPage";
 import {
   sendDocumentEmailToClient,
   triggerMaintenanceStartedEmail,
@@ -824,6 +829,70 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
       const message = err instanceof Error ? err.message : "Link inválido.";
       console.error("GET /api/pagarme/public:", err);
       return res.status(404).json({ error: "NOT_FOUND", message });
+    }
+  });
+
+  app.get("/copiar-pix/:token", async (req, res) => {
+    const token = req.params.token?.trim();
+    // #region agent log
+    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+      body: JSON.stringify({
+        sessionId: "8ececf",
+        runId: "pre-fix",
+        hypothesisId: "B",
+        location: "server.ts:/copiar-pix",
+        message: "PIX copy page requested",
+        data: { hasToken: !!token, tokenLength: token?.length || 0 },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    try {
+      if (!token) {
+        return res.status(404).type("html").send(buildPixCopyErrorHtml("Link inválido."));
+      }
+      const { data: requestDoc } = await loadRequestByPublicToken(token);
+      const pixCode = requestDoc.budgetPayment?.pixQrCode?.trim();
+      // #region agent log
+      fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+        body: JSON.stringify({
+          sessionId: "8ececf",
+          runId: "pre-fix",
+          hypothesisId: "C",
+          location: "server.ts:/copiar-pix",
+          message: "PIX copy page resolved",
+          data: { hasPixCode: !!pixCode, pixCodeLength: pixCode?.length || 0 },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      if (!pixCode) {
+        return res.status(404).type("html").send(buildPixCopyErrorHtml("Código PIX indisponível para este orçamento."));
+      }
+      return res.type("html").send(buildPixCopyPageHtml(pixCode));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Link inválido.";
+      // #region agent log
+      fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+        body: JSON.stringify({
+          sessionId: "8ececf",
+          runId: "pre-fix",
+          hypothesisId: "A",
+          location: "server.ts:/copiar-pix",
+          message: "PIX copy page failed",
+          data: { error: message },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      console.error("GET /copiar-pix/:token:", err);
+      return res.status(404).type("html").send(buildPixCopyErrorHtml(message));
     }
   });
 

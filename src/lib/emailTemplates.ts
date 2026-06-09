@@ -7,6 +7,7 @@ import { MaintenanceRequest } from "../types";
 import { formatRequestDisplayId } from "../services/requestIds";
 import { getRemainingDaysForMaintenance } from "../utils/maintenanceDeadline";
 import { getNbCabecalhoSrcForEmail } from "./brandAssets";
+import { pixCopyUrlForEmail } from "./pixCopyPage";
 
 const CONTACT_EMAIL =
   process.env.EMAIL_REPLY_TO || process.env.SMTP_USER || "neurobots.logistic@gmail.com";
@@ -153,26 +154,51 @@ function paymentOptionsBlock(request: MaintenanceRequest): string {
 
   if (hasPix) {
     const publicToken = payment.publicToken?.trim();
-    const pixPayUrl = publicToken
-      ? escapeHref(`${appUrlForEmail()}/pagamento/${publicToken}`)
-      : null;
+    const copyPixUrl = publicToken ? escapeHref(pixCopyUrlForEmail(publicToken, appUrlForEmail())) : null;
+    // #region agent log
+    if (typeof fetch === "function") {
+      fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+        body: JSON.stringify({
+          sessionId: "8ececf",
+          runId: "pre-fix",
+          hypothesisId: "D",
+          location: "emailTemplates.ts:paymentOptionsBlock",
+          message: "Budget email PIX block built",
+          data: {
+            hasPublicToken: !!publicToken,
+            copyPixUrl: copyPixUrl || null,
+            pixCodeLength: pixCode.length,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+    }
+    // #endregion
     html += `
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;background-color:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;">
       <tr>
         <td style="padding:20px;text-align:center;">
           ${
-            pixPayUrl
-              ? `<a href="${pixPayUrl}" style="display:inline-block;padding:14px 28px;background-color:${BRAND_GREEN};color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;">
+            copyPixUrl
+              ? `<a href="${copyPixUrl}" style="display:inline-block;padding:14px 28px;background-color:${BRAND_GREEN};color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;">
             Pagar com PIX
           </a>
           <p style="margin:12px 0 0;font-size:11px;color:#64748b;line-height:1.5;">
-            Abra o link acima para copiar o código PIX no app do seu banco.
+            Clique no botão para copiar automaticamente o código PIX. Você verá a mensagem &quot;Código copiado!&quot;.
           </p>`
               : `<p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#047857;text-transform:uppercase;">Pagar com PIX</p>
-          <p style="margin:0;font-size:11px;color:#64748b;line-height:1.5;">
-            Escaneie o QR Code no PDF anexo ou copie o código PIX indicado no documento.
+          <p style="margin:0 0 12px;font-size:11px;color:#64748b;line-height:1.5;">
+            Copie o código PIX abaixo no app do seu banco.
           </p>`
           }
+          <p style="margin:16px 0 8px;font-size:10px;font-weight:700;color:#047857;text-transform:uppercase;letter-spacing:0.05em;text-align:left;">
+            Código PIX (copia e cola)
+          </p>
+          <p style="margin:0;font-family:monospace;font-size:10px;line-height:1.5;word-break:break-all;text-align:left;background-color:#ffffff;border:1px solid #a7f3d0;border-radius:10px;padding:12px;color:#0f172a;">
+            ${escapeHtml(pixCode)}
+          </p>
         </td>
       </tr>
     </table>`;
@@ -363,9 +389,10 @@ export function buildBudgetEmailText(request: MaintenanceRequest): string {
     }
     const publicToken = request.budgetPayment?.publicToken?.trim();
     if (pixCode && publicToken) {
-      lines.push(`Pagar com PIX: ${appUrlForEmail()}/pagamento/${publicToken}`);
+      lines.push(`Pagar com PIX (copiar): ${pixCopyUrlForEmail(publicToken, appUrlForEmail())}`);
+      lines.push(`Código PIX: ${pixCode}`);
     } else if (pixCode) {
-      lines.push("Pagar com PIX: consulte o QR Code no PDF anexo.");
+      lines.push(`Código PIX: ${pixCode}`);
     }
   }
 
