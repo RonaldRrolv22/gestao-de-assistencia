@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Manutenção",
+  "description": "Sistema de controle de manutenção e assistência técnica de equipamentos com Kanban, orçamentos, RAT, controle de serviços e relatórios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

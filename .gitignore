@@ -1,0 +1,30 @@
+# Dependencies & build
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+
+# Environment & secrets (never commit)
+.env
+.env.*
+!.env.example
+firebase-service-account.json
+google-service-account.json
+*-service-account.json
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+
+# OS & editors
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+.cursor/
+
+# Local tooling
+assets/.aistudio/

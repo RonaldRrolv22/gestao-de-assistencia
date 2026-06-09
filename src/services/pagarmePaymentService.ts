@@ -1,0 +1,694 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { randomUUID } from "crypto";
+import { getAdminDb } from "../lib/firebaseAdmin";
+import { pagarmeRequest } from "../lib/pagarmeClient";
+import { BudgetPayment, Client, MaintenanceRequest } from "../types";
+import { sanitizeRequestDocId } from "./requestIds";
+
+type RequestDoc = MaintenanceRequest & { budgetPayment?: BudgetPayment };
+
+interface PagarmeCharge {
+  id?: string;
+  status?: string;
+  last_transaction?: {
+    qr_code?: string;
+    qr_code_url?: string;
+    expires_at?: string;
+    status?: string;
+  };
+}
+
+interface PagarmeOrder {
+  id?: string;
+  status?: string;
+  charges?: PagarmeCharge[];
+}
+
+interface PagarmePaymentLink {
+  id?: string;
+  url?: string;
+  status?: string;
+  order?: PagarmeOrder;
+}
+
+function appUrl(): string {
+  return process.env.APP_URL || "http://localhost:3000";
+}
+
+function onlyDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function parsePhone(phone: string): { area_code: string; number: string } {
+  const digits = onlyDigits(phone);
+  if (digits.length >= 10) {
+    return {
+      area_code: digits.slice(0, 2),
+      number: digits.slice(2),
+    };
+  }
+  return { area_code: "81", number: digits || "999999999" };
+}
+
+function pickNonEmpty(...values: (string | undefined)[]): string {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return "";
+}
+
+interface PaymentCustomerProfile {
+  name: string;
+  email: string;
+  document: string;
+  phone: string;
+  addressLine: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  type: "individual" | "company";
+}
+
+async function loadClientById(clientId: string): Promise<Client | null> {
+  if (!clientId?.trim()) return null;
+  const snap = await getAdminDb().collection("clients").doc(clientId).get();
+  if (!snap.exists) return null;
+  return snap.data() as Client;
+}
+
+async function resolveCustomerProfile(req: RequestDoc): Promise<PaymentCustomerProfile> {
+  const client = await loadClientById(req.clientId);
+
+  const document = onlyDigits(pickNonEmpty(client?.cpfCnpj, req.clientCpfCnpj));
+  const name =
+    pickNonEmpty(client?.name, req.clientName) ||
+    pickNonEmpty(client?.company, req.clientCompany);
+
+  const profile: PaymentCustomerProfile = {
+    name,
+    email: pickNonEmpty(client?.email, req.clientEmail),
+    document,
+    phone: pickNonEmpty(client?.phone, req.clientPhone),
+    addressLine: pickNonEmpty(client?.address, req.clientAddress),
+    city: pickNonEmpty(client?.city, req.clientCity),
+    state: pickNonEmpty(client?.state, req.clientState).toUpperCase(),
+    zipCode: onlyDigits(pickNonEmpty(client?.cep, req.clientCep)),
+    type: document.length === 14 ? "company" : "individual",
+  };
+
+  return profile;
+}
+
+function validateCustomerProfile(profile: PaymentCustomerProfile): void {
+  const missing: string[] = [];
+
+  if (profile.document.length !== 11 && profile.document.length !== 14) {
+    missing.push("CPF/CNPJ");
+  }
+  if (!profile.email) missing.push("e-mail");
+  if (onlyDigits(profile.phone).length < 10) missing.push("telefone");
+  if (!profile.name) missing.push("nome");
+  if (!profile.addressLine) missing.push("endereço");
+  if (!profile.city) missing.push("cidade");
+  if (profile.state.length !== 2) missing.push("UF");
+  if (profile.zipCode.length !== 8) missing.push("CEP");
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Dados do cliente incompletos para pagamento (${missing.join(", ")}). ` +
+        "Atualize o cadastro em Clientes antes de gerar a cobrança."
+    );
+  }
+}
+
+function buildCustomer(profile: PaymentCustomerProfile) {
+  validateCustomerProfile(profile);
+
+  const phone = parsePhone(profile.phone);
+
+  return {
+    name: profile.name,
+    email: profile.email.trim().toLowerCase(),
+    document: profile.document,
+    type: profile.type,
+    phones: {
+      mobile_phone: {
+        country_code: "55",
+        area_code: phone.area_code,
+        number: phone.number,
+      },
+    },
+    address: {
+      line_1: profile.addressLine,
+      zip_code: profile.zipCode,
+      city: profile.city,
+      state: profile.state,
+      country: "BR",
+    },
+  };
+}
+
+const MAX_CARD_INSTALLMENTS = 10;
+const MIN_CENTS_PER_INSTALLMENT = 500;
+
+function maxInstallmentsForAmount(amountCents: number): number {
+  for (let number = MAX_CARD_INSTALLMENTS; number >= 1; number--) {
+    if (number === 1 || Math.floor(amountCents / number) >= MIN_CENTS_PER_INSTALLMENT) {
+      return number;
+    }
+  }
+  return 1;
+}
+
+function buildCardInstallments(amountCents: number): { number: number; total: number }[] {
+  const max = maxInstallmentsForAmount(amountCents);
+  const installments: { number: number; total: number }[] = [];
+  for (let number = 1; number <= max; number++) {
+    installments.push({ number, total: amountCents });
+  }
+  return installments;
+}
+
+export function effectiveBudgetTotal(budget: MaintenanceRequest["budget"]): number {
+  if (!budget || budget.isWarranty) return 0;
+  const subtotalProducts = (budget.products || []).reduce((sum, p) => sum + (p.totalValue || 0), 0);
+  const subtotalServices = (budget.services || []).reduce((sum, s) => sum + (s.totalValue || 0), 0);
+  const subtotal = subtotalProducts + subtotalServices;
+  const shipping = budget.shipping || 0;
+  const discount = budget.discount || 0;
+  return Math.max(0, subtotal + shipping - discount);
+}
+
+function amountCentsForRequest(req: RequestDoc): number {
+  if (!req.budget || req.budget.isWarranty) return 0;
+  const cents = Math.round(effectiveBudgetTotal(req.budget) * 100);
+  if (cents <= 0) {
+    throw new Error("Valor do orçamento deve ser maior que zero para cobrança.");
+  }
+  return cents;
+}
+
+function resolveAmountCents(req: RequestDoc, overrideCents?: number): number {
+  const effectiveTotal = effectiveBudgetTotal(req.budget);
+  const storedTotal = req.budget?.totalFinal ?? 0;
+  const shipping = req.budget?.shipping ?? 0;
+  if (overrideCents !== undefined) {
+    if (overrideCents <= 0) {
+      throw new Error("Valor do orçamento deve ser maior que zero para cobrança.");
+    }
+    return overrideCents;
+  }
+  return amountCentsForRequest(req);
+}
+
+export async function loadRequestByDisplayId(requestId: string): Promise<{ docId: string; data: RequestDoc }> {
+  const docId = sanitizeRequestDocId(requestId);
+  const snap = await getAdminDb().collection("maintenance_requests").doc(docId).get();
+  if (!snap.exists) {
+    throw new Error(`Ordem de serviço não encontrada: ${requestId}`);
+  }
+  return { docId, data: snap.data() as RequestDoc };
+}
+
+export async function loadRequestByPublicToken(token: string): Promise<{ docId: string; data: RequestDoc }> {
+  const tokenSnap = await getAdminDb().collection("payment_tokens").doc(token).get();
+  if (!tokenSnap.exists) {
+    throw new Error("Link de pagamento inválido ou expirado.");
+  }
+  const requestDocId = tokenSnap.data()?.requestDocId as string;
+  const snap = await getAdminDb().collection("maintenance_requests").doc(requestDocId).get();
+  if (!snap.exists) {
+    throw new Error("Ordem de serviço não encontrada.");
+  }
+  const data = snap.data() as RequestDoc;
+  if (data.budgetPayment?.publicToken !== token) {
+    throw new Error("Token de pagamento inválido.");
+  }
+  return { docId: requestDocId, data };
+}
+
+async function saveBudgetPayment(docId: string, payment: BudgetPayment): Promise<void> {
+  await getAdminDb().collection("maintenance_requests").doc(docId).set(
+    { budgetPayment: payment, updatedAt: new Date().toISOString() },
+    { merge: true }
+  );
+}
+
+export function isCardPaymentLinkCurrent(
+  payment: BudgetPayment | undefined,
+  amountCents: number,
+  shipping: number
+): boolean {
+  if (shipping <= 0) return false;
+  const url = payment?.paymentLinkUrl?.trim() || "";
+  if (
+    !url ||
+    payment?.method !== "credit_card" ||
+    payment.status === "paid" ||
+    payment.status === "expired" ||
+    !payment.pagarmePaymentLinkId ||
+    payment.amountCents !== amountCents
+  ) {
+    return false;
+  }
+  if (!url.includes("pagar.me")) return false;
+  if (url.includes("localhost") || url.includes("/pagamento/")) return false;
+  return true;
+}
+
+function isPixStillValid(payment: BudgetPayment, amountCents: number): boolean {
+  if (
+    payment.method !== "pix" ||
+    payment.status !== "pending" ||
+    !payment.pixQrCode ||
+    !payment.pagarmeOrderId ||
+    payment.amountCents !== amountCents
+  ) {
+    return false;
+  }
+  if (payment.pixExpiresAt && new Date(payment.pixExpiresAt) <= new Date()) {
+    return false;
+  }
+  return true;
+}
+
+export async function createPixPayment(
+  requestId: string,
+  options?: { forceRefresh?: boolean; amountCents?: number }
+): Promise<BudgetPayment & { requestId: string }> {
+  const { docId, data: req } = await loadRequestByDisplayId(requestId);
+  if (req.budget?.isWarranty) {
+    throw new Error("Orçamentos em garantia não exigem pagamento.");
+  }
+
+  const amountCents = resolveAmountCents(req, options?.amountCents);
+  const existing = req.budgetPayment;
+
+  if (!options?.forceRefresh && existing && isPixStillValid(existing, amountCents)) {
+    return { ...existing, requestId: req.id };
+  }
+
+  const customer = buildCustomer(await resolveCustomerProfile(req));
+
+  const order = await pagarmeRequest<PagarmeOrder>("POST", "/orders", {
+    customer,
+    items: [
+      {
+        amount: amountCents,
+        description: `Orçamento O.S. ${req.id}`,
+        quantity: 1,
+        code: sanitizeRequestDocId(req.id),
+      },
+    ],
+    payments: [
+      {
+        payment_method: "pix",
+        pix: { expires_in: 3600 },
+      },
+    ],
+    metadata: {
+      requestId: req.id,
+      requestDocId: docId,
+    },
+    closed: true,
+  });
+
+  const charge = order.charges?.[0];
+  const tx = charge?.last_transaction;
+
+  const payment: BudgetPayment = {
+    ...(req.budgetPayment || { status: "none", amountCents: 0 }),
+    status: "pending",
+    method: "pix",
+    pagarmeOrderId: order.id,
+    pagarmeChargeId: charge?.id,
+    pixQrCode: tx?.qr_code,
+    pixQrCodeUrl: tx?.qr_code_url,
+    pixExpiresAt: tx?.expires_at,
+    amountCents,
+  };
+
+  await saveBudgetPayment(docId, payment);
+  return { ...payment, requestId: req.id };
+}
+
+export async function createCardPaymentLink(
+  requestId: string,
+  options?: { amountCents?: number }
+): Promise<BudgetPayment & { requestId: string }> {
+  const { docId, data: req } = await loadRequestByDisplayId(requestId);
+  if (req.budget?.isWarranty) {
+    throw new Error("Orçamentos em garantia não exigem pagamento.");
+  }
+
+  const amountCents = resolveAmountCents(req, options?.amountCents);
+  const installments = buildCardInstallments(amountCents);
+  const customer = buildCustomer(await resolveCustomerProfile(req));
+
+  const link = await pagarmeRequest<PagarmePaymentLink & {
+    payment_settings?: {
+      credit_card_settings?: {
+        installments?: { number: number; total: number }[];
+      };
+    };
+  }>("POST", "/paymentlinks", {
+    name: `Orçamento O.S. ${req.id}`,
+    type: "order",
+    customer_settings: { customer },
+    payment_settings: {
+      accepted_payment_methods: ["credit_card"],
+      credit_card_settings: {
+        operation_type: "auth_and_capture",
+        installments,
+      },
+    },
+    cart_settings: {
+      items: [
+        {
+          name: `Orçamento O.S. ${req.id}`,
+          amount: amountCents,
+          default_quantity: 1,
+        },
+      ],
+    },
+    metadata: {
+      requestId: req.id,
+      requestDocId: docId,
+    },
+  });
+
+  const savedInstallments = link.payment_settings?.credit_card_settings?.installments ?? [];
+  const savedMax = savedInstallments[savedInstallments.length - 1]?.number ?? 1;
+  const requestedMax = installments[installments.length - 1]?.number ?? 1;
+  if (savedMax < requestedMax) {
+    throw new Error(
+      `Pagar.me criou o link apenas com ${savedMax}x, mas o orçamento permite até ${requestedMax}x. Tente gerar o link novamente.`
+    );
+  }
+
+  const payment: BudgetPayment = {
+    ...(req.budgetPayment || { status: "none", amountCents: 0 }),
+    status: "pending",
+    method: "credit_card",
+    pagarmePaymentLinkId: link.id,
+    paymentLinkUrl: link.url,
+    amountCents,
+  };
+
+  await saveBudgetPayment(docId, payment);
+  return { ...payment, requestId: req.id };
+}
+
+async function createPaymentApprovedNotification(req: RequestDoc, paidAt: string): Promise<void> {
+  const notifId = `pay-${sanitizeRequestDocId(req.id)}-${Date.now()}`;
+  const totalFinal = effectiveBudgetTotal(req.budget);
+
+  await getAdminDb().collection("notifications").doc(notifId).set({
+    id: notifId,
+    type: "payment_approved",
+    requestId: req.id,
+    requestNumber: req.requestNumber,
+    clientName: req.clientName,
+    productName: req.productName,
+    totalFinal,
+    title: `Pagamento aprovado — ${req.id}`,
+    message: `O pagamento da O.S. ${req.id} (${req.productName}) foi confirmado. Inicie a manutenção do equipamento.`,
+    createdAt: paidAt,
+    readBy: [],
+  });
+}
+
+async function notifyMaintenanceStartedEmail(req: RequestDoc): Promise<void> {
+  try {
+    const { sendMaintenanceStartedEmail } = await import("../lib/documentEmailService");
+    const result = await sendMaintenanceStartedEmail(req, "auto_payment");
+    if (result.status === "failed") {
+      console.error("Falha ao enviar e-mail de manutenção iniciada:", result.error);
+    }
+  } catch (err) {
+    console.error("Falha ao enviar e-mail de manutenção iniciada:", err);
+  }
+}
+
+async function markRequestPaid(docId: string, req: RequestDoc): Promise<RequestDoc> {
+  if (req.columnId === "manutencao" || req.budgetPayment?.status === "paid") {
+    if (!req.maintenanceStartedEmailSentAt && !req.paymentConfirmationEmailSentAt) {
+      await notifyMaintenanceStartedEmail(req);
+    }
+    return req;
+  }
+
+  const log = {
+    id: `mov-pay-${Date.now()}`,
+    fromColumn: req.columnId,
+    toColumn: "manutencao" as const,
+    userId: "pagarme",
+    userName: "Pagar.me",
+    timestamp: new Date().toISOString(),
+  };
+
+  const paidAt = new Date().toISOString();
+  const budgetPayment: BudgetPayment = {
+    ...(req.budgetPayment || { amountCents: 0, status: "none" }),
+    status: "paid",
+    paidAt,
+  };
+
+  const updated: RequestDoc = {
+    ...req,
+    columnId: "manutencao",
+    budget: req.budget
+      ? { ...req.budget, isApproved: true, approvedDate: paidAt }
+      : req.budget,
+    budgetPayment,
+    movementHistory: [...(req.movementHistory || []), log],
+    rat: req.rat || {
+      diagnostic: req.initialDiagnostic || "",
+      labor: [],
+      parts: [],
+      technicalNotes: "",
+      attachments: [],
+      status: "Rascunho",
+    },
+  };
+
+  await getAdminDb().collection("maintenance_requests").doc(docId).set(
+    { ...updated, updatedAt: new Date().toISOString() },
+    { merge: true }
+  );
+
+  await createPaymentApprovedNotification(updated, paidAt);
+  await notifyMaintenanceStartedEmail(updated);
+
+  return updated;
+}
+
+interface PagarmeWebhookPayload {
+  type?: string;
+  data?: PagarmeOrder & {
+    metadata?: { requestId?: string; requestDocId?: string };
+  };
+}
+
+async function findRequestByPagarmeOrderId(
+  orderId: string
+): Promise<{ docId: string; data: RequestDoc } | null> {
+  const snap = await getAdminDb()
+    .collection("maintenance_requests")
+    .where("budgetPayment.pagarmeOrderId", "==", orderId)
+    .limit(1)
+    .get();
+
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { docId: doc.id, data: doc.data() as RequestDoc };
+}
+
+function isWebhookPaidEvent(payload: PagarmeWebhookPayload): boolean {
+  const eventType = payload.type || "";
+  const order = payload.data;
+  if (!order) return false;
+
+  if (eventType === "order.paid" || eventType === "charge.paid") return true;
+  if (order.status === "paid") return true;
+  if (order.charges?.some((c) => c.status === "paid")) return true;
+  return false;
+}
+
+export async function handlePagarmeWebhook(payload: PagarmeWebhookPayload): Promise<void> {
+  if (!isWebhookPaidEvent(payload)) return;
+
+  const order = payload.data!;
+  let docId = order.metadata?.requestDocId;
+  let req: RequestDoc | null = null;
+
+  if (docId) {
+    const snap = await getAdminDb().collection("maintenance_requests").doc(docId).get();
+    if (snap.exists) req = snap.data() as RequestDoc;
+  }
+
+  if (!req && order.metadata?.requestId) {
+    const loaded = await loadRequestByDisplayId(order.metadata.requestId);
+    docId = loaded.docId;
+    req = loaded.data;
+  }
+
+  if (!req && order.id) {
+    const found = await findRequestByPagarmeOrderId(order.id);
+    if (found) {
+      docId = found.docId;
+      req = found.data;
+    }
+  }
+
+  if (!req || !docId) {
+    console.warn("[pagarme-webhook] O.S. não encontrada para evento pago.", order.id);
+    return;
+  }
+
+  await markRequestPaid(docId, req);
+}
+
+function mapChargeStatus(charge?: PagarmeCharge): BudgetPayment["status"] {
+  const status = charge?.status || charge?.last_transaction?.status;
+  if (status === "paid") return "paid";
+  if (status === "failed" || status === "canceled") return "failed";
+  if (status === "expired") return "expired";
+  return "pending";
+}
+
+async function resolveRemotePaymentStatus(
+  payment: BudgetPayment
+): Promise<{ status: BudgetPayment["status"]; orderId?: string }> {
+  let status: BudgetPayment["status"] = "pending";
+  let orderId = payment.pagarmeOrderId;
+
+  if (payment.pagarmeOrderId) {
+    const order = await pagarmeRequest<PagarmeOrder>("GET", `/orders/${payment.pagarmeOrderId}`);
+    const chargeStatus = mapChargeStatus(order.charges?.[0]);
+    if (order.status === "paid" || chargeStatus === "paid") {
+      return { status: "paid", orderId: payment.pagarmeOrderId };
+    }
+    if (chargeStatus === "failed") status = "failed";
+    if (chargeStatus === "expired") status = "expired";
+  }
+
+  if (payment.pagarmePaymentLinkId) {
+    const link = await pagarmeRequest<PagarmePaymentLink>(
+      "GET",
+      `/paymentlinks/${payment.pagarmePaymentLinkId}`
+    );
+    if (link.status === "paid" || link.order?.status === "paid") {
+      return { status: "paid", orderId: link.order?.id || orderId };
+    }
+    if (link.status === "expired" && status === "pending") {
+      status = "expired";
+    }
+  }
+
+  return { status, orderId };
+}
+
+export async function checkPaymentStatus(requestId: string): Promise<{
+  status: BudgetPayment["status"];
+  request: RequestDoc;
+  paid: boolean;
+}> {
+  const { docId, data: req } = await loadRequestByDisplayId(requestId);
+  const payment = req.budgetPayment;
+
+  if (!payment || payment.status === "none") {
+    return { status: "none", request: req, paid: false };
+  }
+
+  if (payment.status === "paid" || req.columnId === "manutencao") {
+    return { status: "paid", request: req, paid: true };
+  }
+
+  const { status: remoteStatus, orderId } = await resolveRemotePaymentStatus(payment);
+  if (orderId && orderId !== payment.pagarmeOrderId) {
+    payment.pagarmeOrderId = orderId;
+  }
+
+  if (remoteStatus === "paid") {
+    const updated = await markRequestPaid(docId, req);
+    return { status: "paid", request: updated, paid: true };
+  }
+
+  const updatedPayment: BudgetPayment = { ...payment, status: remoteStatus };
+  await saveBudgetPayment(docId, updatedPayment);
+  return { status: remoteStatus, request: { ...req, budgetPayment: updatedPayment }, paid: false };
+}
+
+export async function forceConfirmPaymentForTest(requestId: string): Promise<RequestDoc> {
+  const { docId, data } = await loadRequestByDisplayId(requestId);
+  return markRequestPaid(docId, data);
+}
+
+export async function checkPaymentStatusByToken(token: string) {
+  const { data: req } = await loadRequestByPublicToken(token);
+  return checkPaymentStatus(req.id);
+}
+
+export async function createPublicPaymentToken(requestId: string): Promise<{ url: string; token: string }> {
+  const { docId, data: req } = await loadRequestByDisplayId(requestId);
+  const token = req.budgetPayment?.publicToken || randomUUID();
+
+  await getAdminDb().collection("payment_tokens").doc(token).set({
+    requestDocId: docId,
+    requestId: req.id,
+    createdAt: new Date().toISOString(),
+  });
+
+  const payment: BudgetPayment = {
+    ...(req.budgetPayment || {
+      status: "none",
+      amountCents: req.budget && !req.budget.isWarranty ? Math.round(effectiveBudgetTotal(req.budget) * 100) : 0,
+    }),
+    publicToken: token,
+  };
+
+  await saveBudgetPayment(docId, payment);
+
+  return { token, url: `${appUrl()}/pagamento/${token}` };
+}
+
+export function toPublicPaymentSummary(req: RequestDoc) {
+  return {
+    requestId: req.id,
+    requestNumber: req.requestNumber,
+    clientName: req.clientName,
+    clientCompany: req.clientCompany,
+    productName: req.productName,
+    totalFinal: effectiveBudgetTotal(req.budget),
+    isWarranty: req.budget?.isWarranty ?? false,
+    columnId: req.columnId,
+    budgetPayment: req.budgetPayment || { status: "none" as const, amountCents: 0 },
+  };
+}
+
+export async function createPixPaymentByToken(
+  token: string,
+  options?: { forceRefresh?: boolean; amountCents?: number }
+) {
+  const { data: req } = await loadRequestByPublicToken(token);
+  return createPixPayment(req.id, options);
+}
+
+export async function createCardPaymentLinkByToken(
+  token: string,
+  options?: { amountCents?: number }
+) {
+  const { data: req } = await loadRequestByPublicToken(token);
+  return createCardPaymentLink(req.id, options);
+}
+
+export async function getPublicPaymentSummary(token: string) {
+  const { data: req } = await loadRequestByPublicToken(token);
+  return toPublicPaymentSummary(req);
+}

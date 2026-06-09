@@ -1,0 +1,71 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isSuperAdminEmail() {
+      return request.auth.token.email in [
+        'ronald.oliveira@neurobots.com.br',
+        'yasmin.oliveira@neurobots.com',
+        'yasmin.neurobots@gmail.com'
+      ];
+    }
+
+    function isAdmin() {
+      return isAuth() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profile == "Administrador";
+    }
+
+    function isValidNewProfile() {
+      return request.resource.data.profile in ['Usuário', 'Técnico']
+        || (request.resource.data.profile == 'Administrador' && isSuperAdminEmail());
+    }
+
+    match /users/{uid} {
+      allow read: if isAuth() && (request.auth.uid == uid || isAdmin());
+      allow create: if isAuth() && request.auth.uid == uid && isValidNewProfile();
+      allow update: if isAdmin() || (
+        isAuth() && request.auth.uid == uid &&
+        isSuperAdminEmail() &&
+        request.resource.data.profile == 'Administrador' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['profile'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /clients/{id} {
+      allow read: if isAuth();
+      allow create, update: if isAuth();
+      allow delete: if isAdmin();
+    }
+
+    match /products/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /services/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /technical_products/{id} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    match /maintenance_requests/{id} {
+      allow read: if isAuth();
+      allow create, update: if isAuth();
+      allow delete: if isAdmin();
+    }
+
+    match /metadata/{doc} {
+      allow read: if isAuth();
+      allow write: if isAuth();
+    }
+  }
+}
