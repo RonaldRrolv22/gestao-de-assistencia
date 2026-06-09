@@ -18,6 +18,7 @@ import {
   createPixPayment,
   createPublicPaymentToken,
   isCardPaymentLinkCurrent,
+  isPixStillValid,
 } from "../services/pagarmePaymentService";
 
 const REQUESTS_COLLECTION = "maintenance_requests";
@@ -49,8 +50,8 @@ export async function ensurePaymentMethodsForRequest(
     request = await loadRequest(request.id);
   }
 
-  if (!request.budgetPayment?.pixQrCode) {
-    await createPixPayment(request.id, { amountCents });
+  if (!request.budgetPayment?.pixQrCode || !isPixStillValid(payment, amountCents)) {
+    await createPixPayment(request.id, { amountCents, forceRefresh: !!payment?.pixQrCode });
     request = await loadRequest(request.id);
   }
 

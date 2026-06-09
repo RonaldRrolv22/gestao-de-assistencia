@@ -89,6 +89,10 @@ export interface BudgetPayment {
   pixExpiresAt?: string;
   paidAt?: string;
   amountCents: number;
+  /** Valor usado ao gerar o link de cartão (independente do PIX). */
+  cardLinkAmountCents?: number;
+  /** Valor usado ao gerar o PIX copia e cola (independente do cartão). */
+  pixAmountCents?: number;
   publicToken?: string;
 }
 

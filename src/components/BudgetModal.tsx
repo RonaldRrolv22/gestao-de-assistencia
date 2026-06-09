@@ -24,6 +24,7 @@ import { formatCurrency, formatDate } from "../utils";
 import { downloadHtmlAsPdf } from "../utils/pdfExport";
 import { buildBudgetCommercialHtml, buildFreteSummaryLabel, resolveBudgetPdfPaymentInfo } from "../utils/budgetCommercialPdf";
 import { generateCardLink, generatePixPayment } from "../services/pagarmeApi";
+import { isCardPaymentLinkCurrent, isPixStillValid } from "../utils/budgetPaymentSync";
 import BudgetCommercialPaymentBlock from "./budget/BudgetCommercialPaymentBlock";
 import BudgetPaymentSection from "./BudgetPaymentSection";
 import { formatRequestDisplayId } from "../services/requestIds";
@@ -209,12 +210,8 @@ export default function BudgetModal({
 
     const amountCents = Math.round(calculatedTotal * 100);
     const current = paymentSnapshotRef.current;
-    const needsCard =
-      !current?.paymentLinkUrl ||
-      (current.paymentLinkUrl && current.amountCents !== amountCents);
-    const needsPix =
-      !current?.pixQrCode ||
-      (current.pixQrCode && current.amountCents !== amountCents);
+    const needsCard = !isCardPaymentLinkCurrent(current, amountCents, shipping);
+    const needsPix = !current?.pixQrCode || !isPixStillValid(current, amountCents);
     if (!needsCard && !needsPix) return;
 
     const attemptKey = `${request.id}:${shipping}:${amountCents}:${needsCard}:${needsPix}`;
@@ -240,12 +237,8 @@ export default function BudgetModal({
     const timer = setTimeout(async () => {
       const liveAmountCents = Math.round(calculatedTotalRef.current * 100);
       const latest = paymentSnapshotRef.current;
-      const stillNeedsCard =
-        !latest?.paymentLinkUrl ||
-        (latest.paymentLinkUrl && latest.amountCents !== liveAmountCents);
-      const stillNeedsPix =
-        !latest?.pixQrCode ||
-        (latest.pixQrCode && latest.amountCents !== liveAmountCents);
+      const stillNeedsCard = !isCardPaymentLinkCurrent(latest, liveAmountCents, shipping);
+      const stillNeedsPix = !latest?.pixQrCode || !isPixStillValid(latest, liveAmountCents);
       if (!stillNeedsCard && !stillNeedsPix) return;
 
       setAutoCardLoading(stillNeedsCard);
@@ -254,12 +247,15 @@ export default function BudgetModal({
       setAutoPixError(null);
 
       const tasks: Promise<void>[] = [];
-      const pixForceRefresh = !!(latest?.pixQrCode && latest.amountCents !== liveAmountCents);
+      const pixForceRefresh = !!(latest?.pixQrCode && !isPixStillValid(latest, liveAmountCents));
 
       if (stillNeedsCard) {
         tasks.push(
           generateCardLink(request.id, liveAmountCents)
-            .then((result) => setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result })))
+            .then((result) => {
+              autoPaymentRequestedRef.current = "";
+              setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result }));
+            })
             .catch((err) => {
               autoPaymentRequestedRef.current = "";
               setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
@@ -271,7 +267,10 @@ export default function BudgetModal({
       if (stillNeedsPix) {
         tasks.push(
           generatePixPayment(request.id, pixForceRefresh, liveAmountCents)
-            .then((result) => setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result })))
+            .then((result) => {
+              autoPaymentRequestedRef.current = "";
+              setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result }));
+            })
             .catch((err) => {
               autoPaymentRequestedRef.current = "";
               setAutoPixError(err instanceof Error ? err.message : "Erro ao gerar PIX.");

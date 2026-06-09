@@ -16,6 +16,7 @@ import {
 } from "../services/pagarmeApi";
 import { CheckCircle2 } from "lucide-react";
 import PaymentPanel from "./payment/PaymentPanel";
+import { isCardPaymentLinkCurrent } from "../utils/budgetPaymentSync";
 
 interface BudgetPaymentSectionProps {
   request: MaintenanceRequest;
@@ -162,7 +163,7 @@ export default function BudgetPaymentSection({
     [publicToken, request.id, onPaymentChange]
   );
 
-  const pixAmountCents = payment?.amountCents ?? 0;
+  const pixAmountCents = payment?.pixAmountCents ?? payment?.amountCents ?? 0;
   const liveAmountCents = Math.round(totalFinal * 100);
   const pixAmountMismatch =
     !compact &&
@@ -171,6 +172,14 @@ export default function BudgetPaymentSection({
     !!payment?.pixQrCode &&
     liveAmountCents > 0 &&
     pixAmountCents !== liveAmountCents;
+  const cardAmountMismatch =
+    !compact &&
+    !request.budget?.isWarranty &&
+    payment?.status !== "paid" &&
+    !!payment?.paymentLinkUrl &&
+    shipping > 0 &&
+    liveAmountCents > 0 &&
+    !isCardPaymentLinkCurrent(payment, liveAmountCents, shipping);
 
   const handleCard = async () => {
     const amountCents = Math.round(totalFinalRef.current * 100);
@@ -192,6 +201,11 @@ export default function BudgetPaymentSection({
       setLoadingCard(false);
     }
   };
+
+  useEffect(() => {
+    if (!cardAmountMismatch || loadingCard || externalLoadingCard) return;
+    void handleCard();
+  }, [cardAmountMismatch, loadingCard, externalLoadingCard, totalFinal, shipping]);
 
   const handlePublicLink = async () => {
     if (publicUrl && !compact) return;

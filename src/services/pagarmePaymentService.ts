@@ -8,6 +8,12 @@ import { getAdminDb } from "../lib/firebaseAdmin";
 import { pagarmeRequest } from "../lib/pagarmeClient";
 import { BudgetPayment, Client, MaintenanceRequest } from "../types";
 import { sanitizeRequestDocId } from "./requestIds";
+import {
+  isCardPaymentLinkCurrent,
+  isPixStillValid,
+} from "../utils/budgetPaymentSync";
+
+export { isCardPaymentLinkCurrent, isPixStillValid };
 
 type RequestDoc = MaintenanceRequest & { budgetPayment?: BudgetPayment };
 
@@ -179,6 +185,9 @@ function buildCardInstallments(amountCents: number): { number: number; total: nu
 
 export function effectiveBudgetTotal(budget: MaintenanceRequest["budget"]): number {
   if (!budget || budget.isWarranty) return 0;
+  if (typeof budget.totalFinal === "number" && Number.isFinite(budget.totalFinal)) {
+    return Math.max(0, budget.totalFinal);
+  }
   const subtotalProducts = (budget.products || []).reduce((sum, p) => sum + (p.totalValue || 0), 0);
   const subtotalServices = (budget.services || []).reduce((sum, s) => sum + (s.totalValue || 0), 0);
   const subtotal = subtotalProducts + subtotalServices;
@@ -197,9 +206,6 @@ function amountCentsForRequest(req: RequestDoc): number {
 }
 
 function resolveAmountCents(req: RequestDoc, overrideCents?: number): number {
-  const effectiveTotal = effectiveBudgetTotal(req.budget);
-  const storedTotal = req.budget?.totalFinal ?? 0;
-  const shipping = req.budget?.shipping ?? 0;
   if (overrideCents !== undefined) {
     if (overrideCents <= 0) {
       throw new Error("Valor do orçamento deve ser maior que zero para cobrança.");
@@ -240,39 +246,6 @@ async function saveBudgetPayment(docId: string, payment: BudgetPayment): Promise
     { budgetPayment: payment, updatedAt: new Date().toISOString() },
     { merge: true }
   );
-}
-
-export function isCardPaymentLinkCurrent(
-  payment: BudgetPayment | undefined,
-  amountCents: number,
-  shipping: number
-): boolean {
-  if (shipping <= 0) return false;
-  const url = payment?.paymentLinkUrl?.trim() || "";
-  if (
-    !url ||
-    payment?.status === "paid" ||
-    payment?.status === "expired" ||
-    !payment?.pagarmePaymentLinkId ||
-    payment.amountCents !== amountCents
-  ) {
-    return false;
-  }
-  if (!url.includes("pagar.me")) return false;
-  if (url.includes("localhost") || url.includes("/pagamento/")) return false;
-  return true;
-}
-
-export function isPixStillValid(payment: BudgetPayment, amountCents: number): boolean {
-  if (
-    payment.status !== "pending" ||
-    !payment.pixQrCode ||
-    !payment.pagarmeOrderId ||
-    payment.amountCents !== amountCents
-  ) {
-    return false;
-  }
-  return true;
 }
 
 export async function createPixPayment(
@@ -329,6 +302,8 @@ export async function createPixPayment(
     pixQrCodeUrl: tx?.qr_code_url,
     pixExpiresAt: tx?.expires_at,
     amountCents,
+    pixAmountCents: amountCents,
+    cardLinkAmountCents: existing?.cardLinkAmountCents,
     paymentLinkUrl: existing?.paymentLinkUrl,
     pagarmePaymentLinkId: existing?.pagarmePaymentLinkId,
   };
@@ -399,6 +374,8 @@ export async function createCardPaymentLink(
     pagarmePaymentLinkId: link.id,
     paymentLinkUrl: link.url,
     amountCents,
+    cardLinkAmountCents: amountCents,
+    pixAmountCents: existing?.pixAmountCents,
     pagarmeOrderId: existing?.pagarmeOrderId,
     pagarmeChargeId: existing?.pagarmeChargeId,
     pixQrCode: existing?.pixQrCode,

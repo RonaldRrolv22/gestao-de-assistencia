@@ -79,6 +79,15 @@ function mapFirebaseAuthError(err: unknown): { status: number; error: string; me
 // Prefer IPv4 first for local dev environment
 dns.setDefaultResultOrder("ipv4first");
 
+function parseAmountCents(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
 export async function createApp() {
   const app = express();
 
@@ -740,7 +749,7 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
       };
       const pixOptions = {
         forceRefresh: !!forceRefresh,
-        amountCents: typeof amountCents === "number" ? amountCents : undefined,
+        amountCents: parseAmountCents(amountCents),
       };
       const result = token
         ? await createPixPaymentByToken(token, pixOptions)
@@ -766,7 +775,7 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
         amountCents?: number;
       };
       const cardOptions = {
-        amountCents: typeof amountCents === "number" ? amountCents : undefined,
+        amountCents: parseAmountCents(amountCents),
       };
       const result = token
         ? await createCardPaymentLinkByToken(token, cardOptions)
