@@ -155,27 +155,6 @@ function paymentOptionsBlock(request: MaintenanceRequest): string {
   if (hasPix) {
     const publicToken = payment.publicToken?.trim();
     const copyPixUrl = publicToken ? escapeHref(pixCopyUrlForEmail(publicToken, appUrlForEmail())) : null;
-    // #region agent log
-    if (typeof fetch === "function") {
-      fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-        body: JSON.stringify({
-          sessionId: "8ececf",
-          runId: "pre-fix",
-          hypothesisId: "D",
-          location: "emailTemplates.ts:paymentOptionsBlock",
-          message: "Budget email PIX block built",
-          data: {
-            hasPublicToken: !!publicToken,
-            copyPixUrl: copyPixUrl || null,
-            pixCodeLength: pixCode.length,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-    }
-    // #endregion
     html += `
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;background-color:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;">
       <tr>

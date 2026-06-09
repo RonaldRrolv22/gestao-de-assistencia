@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Attachment, LaborRow, MaintenanceRequest, RatPartRow, RAT } from "../types";
+import { Attachment, Budget, BudgetItemProduct, BudgetItemService, LaborRow, MaintenanceRequest, RatPartRow, RAT } from "../types";
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? value : [];
@@ -19,6 +19,16 @@ function asStringArray(value: unknown): string[] {
   return [];
 }
 
+export function normalizeBudget(budget: Budget | undefined): Budget | undefined {
+  if (!budget) return undefined;
+
+  return {
+    ...budget,
+    products: asArray<BudgetItemProduct>(budget.products),
+    services: asArray<BudgetItemService>(budget.services),
+  };
+}
+
 export function normalizeRat(rat: RAT | undefined): RAT | undefined {
   if (!rat) return undefined;
 
@@ -32,9 +42,16 @@ export function normalizeRat(rat: RAT | undefined): RAT | undefined {
 }
 
 export function normalizeMaintenanceRequest(request: MaintenanceRequest): MaintenanceRequest {
-  if (!request.rat) return request;
+  const rat = request.rat ? normalizeRat(request.rat) : undefined;
+  const budget = request.budget ? normalizeBudget(request.budget) : undefined;
+
+  if (rat === request.rat && budget === request.budget) {
+    return request;
+  }
+
   return {
     ...request,
-    rat: normalizeRat(request.rat),
+    ...(rat !== undefined ? { rat } : {}),
+    ...(budget !== undefined ? { budget } : {}),
   };
 }

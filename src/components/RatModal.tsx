@@ -97,34 +97,6 @@ export default function RatModal({
   onOpenBudget
 }: RatModalProps) {
 
-  // #region agent log
-  fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-    body: JSON.stringify({
-      sessionId: "8ececf",
-      runId: "white-screen-pre",
-      hypothesisId: "rat-render",
-      location: "RatModal.tsx:render",
-      message: "RatModal render start",
-      data: {
-        requestId: request.id,
-        columnId: request.columnId,
-        canEdit,
-        readOnly,
-        laborIsArray: Array.isArray(request.rat?.labor),
-        partsIsArray: Array.isArray(request.rat?.parts),
-        attachmentsIsArray: Array.isArray(request.rat?.attachments),
-        defectCausesIsArray: Array.isArray(request.rat?.defectCauses),
-        finalInspectionElectric: request.rat?.finalInspectionElectric ?? null,
-        finalInspectionFunctional: request.rat?.finalInspectionFunctional ?? null,
-        budgetTotalFinalType: request.budget?.totalFinal == null ? "null" : typeof request.budget.totalFinal,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   // Current RAT state
   const isFinalizado = request.rat?.status === "Finalizado";
   const normalizedRat = normalizeRat(request.rat);
@@ -283,25 +255,6 @@ export default function RatModal({
     appNoticeWarning(
       "Com testes marcados como Conforme (C), é obrigatório anexar os resultados dos ensaios na seção de anexos abaixo."
     );
-    // #region agent log
-    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-      body: JSON.stringify({
-        sessionId: "8ececf",
-        runId: "rat-attachment",
-        hypothesisId: "rat-conforme",
-        location: "RatModal.tsx:validateConformeAttachments",
-        message: "RAT blocked: conforme without attachments",
-        data: {
-          finalInspectionElectric,
-          finalInspectionFunctional,
-          attachmentCount: attachments.length,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
     return false;
   };
 

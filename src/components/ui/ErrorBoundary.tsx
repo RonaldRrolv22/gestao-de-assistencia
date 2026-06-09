@@ -24,25 +24,6 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error(`[ErrorBoundary${this.props.label ? `: ${this.props.label}` : ""}]`, error, info);
-    // #region agent log
-    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-      body: JSON.stringify({
-        sessionId: "8ececf",
-        runId: "white-screen-post-fix",
-        hypothesisId: "global-error",
-        location: "ErrorBoundary.tsx:componentDidCatch",
-        message: this.props.label || "React render error",
-        data: {
-          errorMessage: error.message,
-          errorName: error.name,
-          componentStack: info.componentStack?.slice(0, 800) ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
   }
 
   render() {

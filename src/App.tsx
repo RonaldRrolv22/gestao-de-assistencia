@@ -259,27 +259,6 @@ function AppShell() {
 
     const budget = budgetOverride ?? req.budget;
 
-    // #region agent log
-    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-      body: JSON.stringify({
-        sessionId: "8ececf",
-        runId: "warranty-fix",
-        hypothesisId: "warranty-race",
-        location: "App.tsx:handleApproveBudget",
-        message: "Approve budget invoked",
-        data: {
-          requestId,
-          overrideIsWarranty: budgetOverride?.isWarranty ?? null,
-          storedIsWarranty: req.budget?.isWarranty ?? null,
-          effectiveIsWarranty: budget?.isWarranty ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-
     if (budget && !budget.isWarranty) {
       appNoticeWarning("Orçamentos particulares só avançam após pagamento confirmado via Pagar.me.");
       throw new Error("Orçamento particular exige pagamento confirmado.");
@@ -663,25 +642,6 @@ function AppShell() {
               setActiveBudgetReqShowPdf(showPdf);
             }}
             onOpenRat={(req) => {
-              // #region agent log
-              fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-                body: JSON.stringify({
-                  sessionId: "8ececf",
-                  runId: "white-screen-pre",
-                  hypothesisId: "state-open",
-                  location: "App.tsx:onOpenRat",
-                  message: "Opening RAT modal state",
-                  data: {
-                    requestId: req.id,
-                    budgetTotalFinal: req.budget?.totalFinal ?? null,
-                    budgetIsWarranty: req.budget?.isWarranty ?? null,
-                  },
-                  timestamp: Date.now(),
-                }),
-              }).catch(() => {});
-              // #endregion
               setRatReadOnly(false);
               setActiveRatShowPdf(false);
               setActiveRatReq(req);
@@ -764,29 +724,39 @@ function AppShell() {
       </main>
 
       {activeBudgetReq && (
-        <BudgetModal
-          request={activeBudgetReq}
-          productsCatalog={productsCatalog}
-          servicesCatalog={servicesCatalog}
-          onSaveBudget={handleSaveBudget}
-          onApproveBudget={handleApproveBudget}
-          onRejectBudget={handleRejectBudget}
-          onClose={() => {
+        <ErrorBoundary
+          label="Orçamento"
+          onReset={() => {
             setActiveBudgetReq(null);
             setActiveBudgetReqShowPdf(false);
             setBudgetReadOnly(false);
-            if (budgetReturnView) {
-              if (budgetReturnView.type === "rat") {
-                setActiveRatReq(budgetReturnView.request);
-              } else if (budgetReturnView.type === "consolidated") {
-                setInitialEditingRequest(budgetReturnView.request);
-              }
-              setBudgetReturnView(null);
-            }
+            setBudgetReturnView(null);
           }}
-          canEdit={userCanEditBudget && !budgetReadOnly}
-          initialShowPdf={activeBudgetReqShowPdf}
-        />
+        >
+          <BudgetModal
+            request={activeBudgetReq}
+            productsCatalog={productsCatalog}
+            servicesCatalog={servicesCatalog}
+            onSaveBudget={handleSaveBudget}
+            onApproveBudget={handleApproveBudget}
+            onRejectBudget={handleRejectBudget}
+            onClose={() => {
+              setActiveBudgetReq(null);
+              setActiveBudgetReqShowPdf(false);
+              setBudgetReadOnly(false);
+              if (budgetReturnView) {
+                if (budgetReturnView.type === "rat") {
+                  setActiveRatReq(budgetReturnView.request);
+                } else if (budgetReturnView.type === "consolidated") {
+                  setInitialEditingRequest(budgetReturnView.request);
+                }
+                setBudgetReturnView(null);
+              }
+            }}
+            canEdit={userCanEditBudget && !budgetReadOnly}
+            initialShowPdf={activeBudgetReqShowPdf}
+          />
+        </ErrorBoundary>
       )}
 
       {activeRatReq && (

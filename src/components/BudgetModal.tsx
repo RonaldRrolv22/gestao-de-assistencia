@@ -133,7 +133,7 @@ export default function BudgetModal({
 
   useEffect(() => {
     autoPaymentRequestedRef.current = "";
-  }, [discount, calculatedTotal]);
+  }, [discount, shipping, isWarranty, budgetProducts, budgetServices]);
 
   // Catalog selectors helper
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -208,22 +208,6 @@ export default function BudgetModal({
     const attemptKey = `${request.id}:${shipping}:${amountCents}:${needsCard}:${needsPix}`;
     if (autoPaymentRequestedRef.current === attemptKey) return;
     autoPaymentRequestedRef.current = attemptKey;
-
-    // #region agent log
-    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-      body: JSON.stringify({
-        sessionId: "8ececf",
-        runId: "discount-fix",
-        hypothesisId: "card-amount",
-        location: "BudgetModal.tsx:autoPayment",
-        message: "Regenerating payment methods for budget total",
-        data: { amountCents, discount, needsCard, needsPix, storedAmountCents: current?.amountCents ?? null },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     const timer = setTimeout(async () => {
       const liveAmountCents = Math.round(calculatedTotalRef.current * 100);

@@ -405,27 +405,6 @@ export default function KanbanBoard({
     } else if (req.columnId === "orcamento" || req.columnId === "recusado") {
       onOpenBudget(req);
     } else if (req.columnId === "manutencao") {
-      // #region agent log
-      fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
-        body: JSON.stringify({
-          sessionId: "8ececf",
-          runId: "white-screen-pre",
-          hypothesisId: "click-flow",
-          location: "KanbanBoard.tsx:handleCardClick",
-          message: "Maintenance card clicked",
-          data: {
-            requestId: req.id,
-            hasRat: Boolean(req.rat),
-            ratStatus: req.rat?.status ?? null,
-            laborType: req.rat?.labor == null ? "null" : Array.isArray(req.rat.labor) ? "array" : typeof req.rat.labor,
-            partsType: req.rat?.parts == null ? "null" : Array.isArray(req.rat.parts) ? "array" : typeof req.rat.parts,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       onOpenRat(req);
     } else if (req.columnId === "liberado") {
       handleSetEditingRequest(req);
