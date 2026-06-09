@@ -242,6 +242,38 @@ export default function RatModal({
     setAttachments(prev => prev.filter(att => att.id !== id));
   };
 
+  const requiresConformeAttachments =
+    finalInspectionElectric === "C" || finalInspectionFunctional === "C";
+  const missingConformeAttachments = requiresConformeAttachments && attachments.length === 0;
+
+  const validateConformeAttachments = (): boolean => {
+    if (!missingConformeAttachments) return true;
+    setShowErrors(true);
+    appNoticeWarning(
+      "Com testes marcados como Conforme (C), é obrigatório anexar os resultados dos ensaios na seção de anexos abaixo."
+    );
+    // #region agent log
+    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+      body: JSON.stringify({
+        sessionId: "8ececf",
+        runId: "rat-attachment",
+        hypothesisId: "rat-conforme",
+        location: "RatModal.tsx:validateConformeAttachments",
+        message: "RAT blocked: conforme without attachments",
+        data: {
+          finalInspectionElectric,
+          finalInspectionFunctional,
+          attachmentCount: attachments.length,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    return false;
+  };
+
   const getRatPayload = (status: "Rascunho" | "Finalizado"): RAT => {
     return {
       diagnostic: diagnostic.trim(),
@@ -271,6 +303,7 @@ export default function RatModal({
       appNoticeWarning("Por favor, preencha todos os campos obrigatórios (Diagnóstico Técnico e pelo menos um registro de Mão de Obra) antes de finalizar a RAT.");
       return;
     }
+    if (!validateConformeAttachments()) return;
     setShowFinalizeConfirm(true);
   };
 
@@ -407,6 +440,10 @@ export default function RatModal({
   };
 
   const confirmSaveDraft = async () => {
+    if (!validateConformeAttachments()) {
+      setShowSaveDraftConfirm(false);
+      return;
+    }
     setShowSaveDraftConfirm(false);
     setSavingRat(true);
     try {
@@ -868,14 +905,19 @@ export default function RatModal({
             </div>
 
             {/* Section 5: Anexos e arquivos (PDF, imagens, laudos) */}
-            <div className="space-y-3.5 pt-2 border-t border-slate-100">
+            <div className={`space-y-3.5 pt-2 border-t border-slate-100 ${showErrors && missingConformeAttachments ? "rounded-xl ring-2 ring-red-500/20" : ""}`}>
               <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
                 <Paperclip className="h-4 w-4 text-sky-500" />
-                <span>Documentações e Fotos (Anexos)</span>
+                <span>Documentações e Fotos (Anexos){requiresConformeAttachments ? " *" : ""}</span>
               </h4>
+              {showErrors && missingConformeAttachments && (
+                <p className="text-[11px] text-red-600 font-semibold">
+                  Anexo obrigatório quando algum ensaio estiver marcado como Conforme (C).
+                </p>
+              )}
 
               {!isFinalizado && canEdit && (
-                <div id="attachments-dropzone" className="border-2 border-dashed border-slate-205 rounded-xl p-5 text-center bg-slate-50/50 hover:bg-slate-50 transition-all relative">
+                <div id="attachments-dropzone" className={`border-2 border-dashed rounded-xl p-5 text-center bg-slate-50/50 hover:bg-slate-50 transition-all relative ${showErrors && missingConformeAttachments ? "border-red-400 bg-red-50/30" : "border-slate-205"}`}>
                   <Upload className="h-7 w-7 text-slate-400 mx-auto mb-2" />
                   <p className="text-slate-600 font-semibold text-xs">Arraste fotos / laudos ou clique para fazer upload</p>
                   <p className="text-slate-400 text-[10px] mt-0.5">Formatos suportados: PNG, JPG, PDF, TXT (Gravado de forma local)</p>

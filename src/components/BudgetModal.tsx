@@ -206,20 +206,45 @@ export default function BudgetModal({
     if (budgetProducts.length === 0 && budgetServices.length === 0) return;
     if (paymentSnapshotRef.current?.status === "paid") return;
 
+    const amountCents = Math.round(calculatedTotal * 100);
     const current = paymentSnapshotRef.current;
-    const needsCard = !current?.paymentLinkUrl;
-    const needsPix = !current?.pixQrCode;
+    const needsCard =
+      !current?.paymentLinkUrl ||
+      (current.paymentLinkUrl && current.amountCents !== amountCents);
+    const needsPix =
+      !current?.pixQrCode ||
+      (current.pixQrCode && current.amountCents !== amountCents);
     if (!needsCard && !needsPix) return;
 
-    const attemptKey = `${request.id}:${shipping}:${needsCard}:${needsPix}`;
+    const attemptKey = `${request.id}:${shipping}:${amountCents}:${needsCard}:${needsPix}`;
     if (autoPaymentRequestedRef.current === attemptKey) return;
     autoPaymentRequestedRef.current = attemptKey;
 
+    // #region agent log
+    fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+      body: JSON.stringify({
+        sessionId: "8ececf",
+        runId: "discount-fix",
+        hypothesisId: "card-amount",
+        location: "BudgetModal.tsx:autoPayment",
+        message: "Regenerating payment methods for budget total",
+        data: { amountCents, discount, needsCard, needsPix, storedAmountCents: current?.amountCents ?? null },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
     const timer = setTimeout(async () => {
-      const amountCents = Math.round(calculatedTotalRef.current * 100);
+      const liveAmountCents = Math.round(calculatedTotalRef.current * 100);
       const latest = paymentSnapshotRef.current;
-      const stillNeedsCard = !latest?.paymentLinkUrl;
-      const stillNeedsPix = !latest?.pixQrCode;
+      const stillNeedsCard =
+        !latest?.paymentLinkUrl ||
+        (latest.paymentLinkUrl && latest.amountCents !== liveAmountCents);
+      const stillNeedsPix =
+        !latest?.pixQrCode ||
+        (latest.pixQrCode && latest.amountCents !== liveAmountCents);
       if (!stillNeedsCard && !stillNeedsPix) return;
 
       setAutoCardLoading(stillNeedsCard);
@@ -228,10 +253,11 @@ export default function BudgetModal({
       setAutoPixError(null);
 
       const tasks: Promise<void>[] = [];
+      const pixForceRefresh = !!(latest?.pixQrCode && latest.amountCents !== liveAmountCents);
 
       if (stillNeedsCard) {
         tasks.push(
-          generateCardLink(request.id, amountCents)
+          generateCardLink(request.id, liveAmountCents)
             .then((result) => setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result })))
             .catch((err) => {
               autoPaymentRequestedRef.current = "";
@@ -243,7 +269,7 @@ export default function BudgetModal({
 
       if (stillNeedsPix) {
         tasks.push(
-          generatePixPayment(request.id, false, amountCents)
+          generatePixPayment(request.id, pixForceRefresh, liveAmountCents)
             .then((result) => setPaymentSnapshot((prev) => ({ ...(prev || { status: "none", amountCents: 0 }), ...result })))
             .catch((err) => {
               autoPaymentRequestedRef.current = "";
@@ -259,6 +285,8 @@ export default function BudgetModal({
     return () => clearTimeout(timer);
   }, [
     shipping,
+    discount,
+    calculatedTotal,
     isWarranty,
     budgetProducts.length,
     budgetServices.length,
@@ -266,6 +294,7 @@ export default function BudgetModal({
     request.columnId,
     paymentSnapshot?.pixQrCode,
     paymentSnapshot?.paymentLinkUrl,
+    paymentSnapshot?.amountCents,
   ]);
 
   // Handle adding product item
