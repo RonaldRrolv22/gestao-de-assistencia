@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
+import React, { useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -19,6 +19,7 @@ import { User } from "../types";
 import { isAdminProfile, canAccessHubTestes } from "../services/userRoles";
 import { AppTab } from "../navigation";
 import SystemBrand from "./ui/SystemBrand";
+import HelpManualModal from "./HelpManualModal";
 
 interface SidebarProps {
   currentUser: User;
@@ -29,6 +30,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ currentUser, activeTab, setActiveTab, onOpenHubTestes, onLogout }: SidebarProps) {
+  const [showHelpManual, setShowHelpManual] = useState(false);
   const isAdmin = isAdminProfile(currentUser.profile);
   const canOpenHub = canAccessHubTestes(currentUser.profile);
 
@@ -82,15 +84,17 @@ export default function Sidebar({ currentUser, activeTab, setActiveTab, onOpenHu
       </nav>
 
       <div className="px-3 pb-2">
-        <a
-          href="#"
-          onClick={(e) => e.preventDefault()}
-          className="flex items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-white/60 rounded-xl transition-all duration-200"
+        <button
+          type="button"
+          onClick={() => setShowHelpManual(true)}
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-white/60 rounded-xl transition-all duration-200 text-left"
         >
           <HelpCircle className="w-4 h-4" />
           Ajuda / Manual
-        </a>
+        </button>
       </div>
+
+      {showHelpManual && <HelpManualModal onClose={() => setShowHelpManual(false)} />}
 
       <div className="p-3 border-t border-border/80 shrink-0">
         <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white/90 border border-border/50 shadow-card">
