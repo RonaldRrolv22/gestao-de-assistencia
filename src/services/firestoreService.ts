@@ -33,6 +33,7 @@ import {
   buildRequestDisplayId,
   formatRequestNumber,
 } from "./requestIds";
+import { normalizeMaintenanceRequest } from "../utils/normalizeRequest";
 
 /** Firestore rejeita valores `undefined` em qualquer nível do objeto. */
 function stripUndefinedDeep<T>(value: T): T {
@@ -93,7 +94,7 @@ export function subscribeToRequests(
   return onSnapshot(collection(db, COLLECTIONS.requests), (snapshot) => {
     const requests = snapshot.docs.map((d) => {
       const data = d.data() as MaintenanceRequest;
-      return { ...data, id: data.id || d.id };
+      return normalizeMaintenanceRequest({ ...data, id: data.id || d.id });
     });
     callback(requests);
   });

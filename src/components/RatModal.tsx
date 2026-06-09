@@ -57,6 +57,7 @@ import {
   appNoticeWarning,
 } from "../utils/appNotice";
 import { getEmailStatusForType } from "../utils/emailDeliveryStatus";
+import { normalizeRat } from "../utils/normalizeRequest";
 
 interface RatModalProps {
   request: MaintenanceRequest;
@@ -96,18 +97,47 @@ export default function RatModal({
   onOpenBudget
 }: RatModalProps) {
 
+  // #region agent log
+  fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+    body: JSON.stringify({
+      sessionId: "8ececf",
+      runId: "white-screen-pre",
+      hypothesisId: "rat-render",
+      location: "RatModal.tsx:render",
+      message: "RatModal render start",
+      data: {
+        requestId: request.id,
+        columnId: request.columnId,
+        canEdit,
+        readOnly,
+        laborIsArray: Array.isArray(request.rat?.labor),
+        partsIsArray: Array.isArray(request.rat?.parts),
+        attachmentsIsArray: Array.isArray(request.rat?.attachments),
+        defectCausesIsArray: Array.isArray(request.rat?.defectCauses),
+        finalInspectionElectric: request.rat?.finalInspectionElectric ?? null,
+        finalInspectionFunctional: request.rat?.finalInspectionFunctional ?? null,
+        budgetTotalFinalType: request.budget?.totalFinal == null ? "null" : typeof request.budget.totalFinal,
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   // Current RAT state
   const isFinalizado = request.rat?.status === "Finalizado";
+  const normalizedRat = normalizeRat(request.rat);
   
   // Local edit states
-  const [diagnostic, setDiagnostic] = useState(request.rat?.diagnostic || request.initialDiagnostic || "");
-  const [laborRows, setLaborRows] = useState<LaborRow[]>(request.rat?.labor || []);
-  const [partRows, setPartRows] = useState<RatPartRow[]>(request.rat?.parts || []);
-  const [technicalNotes, setTechnicalNotes] = useState(request.rat?.technicalNotes || "");
-  const [attachments, setAttachments] = useState<Attachment[]>(request.rat?.attachments || []);
-  const [finalInspectionElectric, setFinalInspectionElectric] = useState<"C" | "NC" | "N/A">(request.rat?.finalInspectionElectric || "N/A");
-  const [finalInspectionFunctional, setFinalInspectionFunctional] = useState<"C" | "NC" | "N/A">(request.rat?.finalInspectionFunctional || "N/A");
-  const [defectCauses, setDefectCauses] = useState<string[]>(request.rat?.defectCauses || []);
+  const [diagnostic, setDiagnostic] = useState(normalizedRat?.diagnostic || request.initialDiagnostic || "");
+  const [laborRows, setLaborRows] = useState<LaborRow[]>(normalizedRat?.labor ?? []);
+  const [partRows, setPartRows] = useState<RatPartRow[]>(normalizedRat?.parts ?? []);
+  const [technicalNotes, setTechnicalNotes] = useState(normalizedRat?.technicalNotes || "");
+  const [attachments, setAttachments] = useState<Attachment[]>(normalizedRat?.attachments ?? []);
+  const [finalInspectionElectric, setFinalInspectionElectric] = useState<"C" | "NC" | "N/A">(normalizedRat?.finalInspectionElectric || "N/A");
+  const [finalInspectionFunctional, setFinalInspectionFunctional] = useState<"C" | "NC" | "N/A">(normalizedRat?.finalInspectionFunctional || "N/A");
+  const [defectCauses, setDefectCauses] = useState<string[]>(normalizedRat?.defectCauses ?? []);
 
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
@@ -136,6 +166,7 @@ export default function RatModal({
 
   // Local validation error message
   const [errorLocal, setErrorLocal] = useState("");
+  const [showErrors, setShowErrors] = useState(false);
 
   const isClosed = request.columnId === "liberado";
   const isPaymentSettled =
@@ -295,8 +326,6 @@ export default function RatModal({
   };
 
   // Finalize completely
-  const [showErrors, setShowErrors] = useState(false);
-
   const handleFinalize = () => {
     if (!diagnostic.trim() || laborRows.length === 0) {
       setShowErrors(true);

@@ -25,6 +25,7 @@ import SettingsSection from "./components/SettingsSection";
 import OsDatabaseSection from "./components/OsDatabaseSection";
 import BudgetModal from "./components/BudgetModal";
 import RatModal from "./components/RatModal";
+import ErrorBoundary from "./components/ui/ErrorBoundary";
 import { AppTab } from "./navigation";
 import { useAppData } from "./hooks/useAppData";
 import { subscribeToAuth, subscribeToUserProfile, logoutUser } from "./services/authService";
@@ -662,6 +663,25 @@ function AppShell() {
               setActiveBudgetReqShowPdf(showPdf);
             }}
             onOpenRat={(req) => {
+              // #region agent log
+              fetch("http://127.0.0.1:7942/ingest/8708ad6b-cc5a-43ff-b2a2-d4996d444d0d", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8ececf" },
+                body: JSON.stringify({
+                  sessionId: "8ececf",
+                  runId: "white-screen-pre",
+                  hypothesisId: "state-open",
+                  location: "App.tsx:onOpenRat",
+                  message: "Opening RAT modal state",
+                  data: {
+                    requestId: req.id,
+                    budgetTotalFinal: req.budget?.totalFinal ?? null,
+                    budgetIsWarranty: req.budget?.isWarranty ?? null,
+                  },
+                  timestamp: Date.now(),
+                }),
+              }).catch(() => {});
+              // #endregion
               setRatReadOnly(false);
               setActiveRatShowPdf(false);
               setActiveRatReq(req);
@@ -770,36 +790,45 @@ function AppShell() {
       )}
 
       {activeRatReq && (
-        <RatModal
-          request={activeRatReq}
-          onSaveRat={handleSaveRat}
-          onFinalizeRat={handleFinalizeRat}
-          onReopenRat={handleReopenRat}
-          onReleaseRequest={handleReleaseRequest}
-          onGenerateShippingLabel={handleGenerateShippingLabel}
-          isGeneratingShippingLabel={shippingLabelLoadingId === activeRatReq.id}
-          onResendTrackingEmail={handleResendTrackingEmail}
-          isResendingTrackingEmail={trackingEmailResendLoadingId === activeRatReq.id}
-          onOpenHubTestes={userCanOpenHub ? handleOpenHubTestes : undefined}
-          onClose={() => {
+        <ErrorBoundary
+          label="RAT (Manutenção)"
+          onReset={() => {
             setActiveRatReq(null);
             setActiveRatShowPdf(false);
             setRatReadOnly(false);
           }}
-          canEdit={userCanEditRat && !ratReadOnly}
-          readOnly={ratReadOnly}
-          initialShowPdf={activeRatShowPdf}
-          currentUser={currentUser}
-          onOpenBudget={(req) => {
-            setBudgetReturnView({ type: "rat", request: req });
-            setActiveRatReq(null);
-            setActiveRatShowPdf(false);
-            setRatReadOnly(false);
-            setBudgetReadOnly(false);
-            setActiveBudgetReq(req);
-            setActiveBudgetReqShowPdf(true);
-          }}
-        />
+        >
+          <RatModal
+            request={activeRatReq}
+            onSaveRat={handleSaveRat}
+            onFinalizeRat={handleFinalizeRat}
+            onReopenRat={handleReopenRat}
+            onReleaseRequest={handleReleaseRequest}
+            onGenerateShippingLabel={handleGenerateShippingLabel}
+            isGeneratingShippingLabel={shippingLabelLoadingId === activeRatReq.id}
+            onResendTrackingEmail={handleResendTrackingEmail}
+            isResendingTrackingEmail={trackingEmailResendLoadingId === activeRatReq.id}
+            onOpenHubTestes={userCanOpenHub ? handleOpenHubTestes : undefined}
+            onClose={() => {
+              setActiveRatReq(null);
+              setActiveRatShowPdf(false);
+              setRatReadOnly(false);
+            }}
+            canEdit={userCanEditRat && !ratReadOnly}
+            readOnly={ratReadOnly}
+            initialShowPdf={activeRatShowPdf}
+            currentUser={currentUser}
+            onOpenBudget={(req) => {
+              setBudgetReturnView({ type: "rat", request: req });
+              setActiveRatReq(null);
+              setActiveRatShowPdf(false);
+              setRatReadOnly(false);
+              setBudgetReadOnly(false);
+              setActiveBudgetReq(req);
+              setActiveBudgetReqShowPdf(true);
+            }}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );
