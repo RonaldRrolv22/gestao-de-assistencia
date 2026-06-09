@@ -89,9 +89,8 @@ function buildCardBlockHtml(info: BudgetPdfPaymentInfo): string {
       <p class="payment-amount-label">Valor para pagamento:</p>
       <p class="payment-amount">${fmt(info.totalFinal)}</p>
       <p class="payment-cta">
-        <a href="${url}" class="payment-link-btn">Clique aqui para pagar com cartão (até 10x)</a>
+        <a href="${url}" class="payment-link-btn">Pagar com cartão de crédito</a>
       </p>
-      <p class="payment-link-url"><a href="${url}">${url}</a></p>
     </div>`;
   }
 
@@ -119,7 +118,6 @@ function buildPixBlockHtml(info: BudgetPdfPaymentInfo): string {
   }
 
   if (info.pixCopyPaste) {
-    const code = escapeHtml(info.pixCopyPaste);
     const qrImg = info.pixQrCodeUrl
       ? `<div class="payment-qr"><img src="${escapeHtml(info.pixQrCodeUrl)}" alt="QR Code PIX" /></div>`
       : "";
@@ -131,10 +129,11 @@ function buildPixBlockHtml(info: BudgetPdfPaymentInfo): string {
       </div>
       <p class="payment-amount-label">Valor para pagamento:</p>
       <p class="payment-amount">${fmt(info.totalFinal)}</p>
+      <p class="payment-cta">
+        <span class="payment-pix-btn">Pagar com PIX</span>
+      </p>
       ${qrImg}
-      <p class="payment-amount-label">Código copia e cola:</p>
-      <p class="payment-pix-code">${code}</p>
-      <p class="payment-text payment-muted">Válido até confirmação do pagamento. Copie o código acima no app do seu banco.</p>
+      <p class="payment-text payment-muted">Escaneie o QR Code acima no app do seu banco. Válido até confirmação do pagamento.</p>
     </div>`;
   }
 
@@ -307,6 +306,10 @@ export function buildBudgetCommercialHtml(params: BudgetCommercialPdfParams): st
     .payment-link-btn {
       display: inline-block; background: #2563eb; color: #fff; padding: 10px 20px; border-radius: 8px;
       text-decoration: none; font-weight: bold; font-size: 12px;
+    }
+    .payment-pix-btn {
+      display: inline-block; background: #059669; color: #fff; padding: 10px 20px; border-radius: 8px;
+      font-weight: bold; font-size: 12px;
     }
     .payment-link-url a { color: #2563eb; word-break: break-all; font-size: 10px; }
     .payment-text { color: #475569; margin: 4px 0; }

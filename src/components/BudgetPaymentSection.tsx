@@ -253,7 +253,6 @@ export default function BudgetPaymentSection({
       onPublicLink={handlePublicLink}
       onVerify={handleVerify}
       onRefreshPix={() => handlePix(true)}
-      onPixExpire={() => setPixExpired(true)}
       onCopy={copyText}
     />
   );

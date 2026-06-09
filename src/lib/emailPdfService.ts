@@ -16,6 +16,7 @@ import { sanitizeRequestDocId } from "../services/requestIds";
 import {
   createCardPaymentLink,
   createPixPayment,
+  createPublicPaymentToken,
   isCardPaymentLinkCurrent,
 } from "../services/pagarmePaymentService";
 
@@ -50,6 +51,11 @@ export async function ensurePaymentMethodsForRequest(
 
   if (!request.budgetPayment?.pixQrCode) {
     await createPixPayment(request.id, { amountCents });
+    request = await loadRequest(request.id);
+  }
+
+  if (!request.budgetPayment?.publicToken) {
+    await createPublicPaymentToken(request.id);
     request = await loadRequest(request.id);
   }
 

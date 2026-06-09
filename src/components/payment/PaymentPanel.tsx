@@ -3,15 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, CreditCard, Link2, QrCode, RefreshCw, Loader2 } from "lucide-react";
+import React, { useState } from "react";
+import { AlertCircle, CreditCard, QrCode, Loader2 } from "lucide-react";
 import { BudgetPayment } from "../../types";
 import { formatCurrency } from "../../utils";
 import SummaryCard from "../ui/SummaryCard";
 import StatusBadge, { StatusBadgeVariant } from "../ui/StatusBadge";
-import ActionButton from "../ui/ActionButton";
-import PixPaymentCard from "./PixPaymentCard";
-import CreditCardPaymentCard from "./CreditCardPaymentCard";
 import { BUDGET_METHOD_ACTIVE, BUDGET_METHOD_IDLE } from "../budget/budgetModalStyles";
 
 const STATUS_MAP: Record<BudgetPayment["status"], { label: string; variant: StatusBadgeVariant }> = {
@@ -44,19 +41,13 @@ interface PaymentPanelProps {
   onPublicLink: () => void;
   onVerify: () => void;
   onRefreshPix: () => void;
-  onPixExpire: () => void;
   onCopy: (text: string) => void;
 }
-
-const TAB_ACTIVE = "bg-brand-active-bg text-brand-active-text border border-amber-200/60 font-semibold";
-const TAB_IDLE = "text-text-secondary hover:bg-slate-50 border border-transparent";
 
 export default function PaymentPanel({
   totalFinal,
   shipping = 0,
   payment,
-  compact,
-  publicToken,
   error,
   message,
   syncingPix,
@@ -65,33 +56,37 @@ export default function PaymentPanel({
   pixExpired,
   loadingPix,
   loadingCard,
-  loadingVerify,
-  loadingLink,
-  publicUrl,
   onGeneratePix,
   onGenerateCard,
-  onPublicLink,
-  onVerify,
   onRefreshPix,
-  onPixExpire,
   onCopy,
 }: PaymentPanelProps) {
   const status = STATUS_MAP[payment?.status || "none"];
+  const hasPix = !!payment?.pixQrCode && !pixExpired;
+  const hasCard = !!payment?.paymentLinkUrl;
   const [selectedMethod, setSelectedMethod] = useState<"pix" | "card">("pix");
-  const [activeTab, setActiveTab] = useState<"pix" | "card">("pix");
 
-  const showPix = !!payment?.pixQrCode;
-  const showCard = !!payment?.paymentLinkUrl;
-
-  useEffect(() => {
-    if (showPix && !showCard) {
-      setActiveTab("pix");
-      setSelectedMethod("pix");
-    } else if (showCard && !showPix) {
-      setActiveTab("card");
-      setSelectedMethod("card");
+  const handlePixClick = () => {
+    setSelectedMethod("pix");
+    if (pixAmountMismatch) {
+      onRefreshPix();
+      return;
     }
-  }, [showPix, showCard]);
+    if (hasPix && payment?.pixQrCode) {
+      onCopy(payment.pixQrCode);
+      return;
+    }
+    onGeneratePix();
+  };
+
+  const handleCardClick = () => {
+    setSelectedMethod("card");
+    if (hasCard && payment?.paymentLinkUrl) {
+      window.open(payment.paymentLinkUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    onGenerateCard();
+  };
 
   return (
     <SummaryCard
@@ -103,28 +98,16 @@ export default function PaymentPanel({
         </StatusBadge>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div className="rounded-xl bg-gradient-to-br from-slate-50 to-white border border-slate-200/80 p-4 sm:p-5">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Valor total</p>
           <p className="text-3xl sm:text-4xl font-bold text-slate-900 mt-1 tracking-tight">{formatCurrency(totalFinal)}</p>
         </div>
 
-        {shipping <= 0 && !showCard && !showPix && (
+        {shipping <= 0 && !hasCard && !hasPix && (
           <div className="flex gap-2.5 text-amber-900 bg-amber-50 border border-amber-200/80 rounded-xl p-3.5 text-xs leading-relaxed">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
-            <span>Defina o frete para gerar automaticamente as opções de pagamento (cartão e PIX).</span>
-          </div>
-        )}
-        {shipping > 0 && (showCard || showPix) && (
-          <div className="flex gap-2.5 text-emerald-900 bg-emerald-50 border border-emerald-200/80 rounded-xl p-3.5 text-xs leading-relaxed">
-            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
-            <span>
-              {showCard && showPix
-                ? "Cartão e PIX gerados automaticamente ao definir o frete."
-                : showCard
-                  ? "Link de cartão gerado automaticamente ao definir o frete."
-                  : "PIX gerado automaticamente ao definir o frete."}
-            </span>
+            <span>Defina o frete para gerar as opções de pagamento.</span>
           </div>
         )}
         {error && (
@@ -135,110 +118,48 @@ export default function PaymentPanel({
         )}
         {pixAmountMismatch && !syncingPix && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs">
-            O valor do orçamento mudou ({formatCurrency(pixAmountCents / 100)} → {formatCurrency(totalFinal)}).
-            Clique em &quot;Atualizar PIX&quot; para gerar um novo código.
+            Valor alterado ({formatCurrency(pixAmountCents / 100)} → {formatCurrency(totalFinal)}).
+            Clique em &quot;Pagar com PIX&quot; para gerar um novo código.
           </div>
         )}
 
-        <div>
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2.5">
-            Método de pagamento
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              disabled={loadingPix}
-              onClick={() => {
-                setSelectedMethod("pix");
-                onGeneratePix();
-              }}
-              className={selectedMethod === "pix" ? BUDGET_METHOD_ACTIVE : BUDGET_METHOD_IDLE}
-            >
-              {loadingPix ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <QrCode className="h-5 w-5" />
-              )}
-              <span>Gerar PIX</span>
-            </button>
-            <button
-              type="button"
-              disabled={loadingCard}
-              onClick={() => {
-                setSelectedMethod("card");
-                onGenerateCard();
-              }}
-              className={selectedMethod === "card" ? BUDGET_METHOD_ACTIVE : BUDGET_METHOD_IDLE}
-            >
-              {loadingCard ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <CreditCard className="h-5 w-5" />
-              )}
-              <span>Gerar pagamento com cartão</span>
-            </button>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            disabled={loadingPix || syncingPix}
+            onClick={handlePixClick}
+            className={selectedMethod === "pix" ? BUDGET_METHOD_ACTIVE : BUDGET_METHOD_IDLE}
+          >
+            {loadingPix || syncingPix ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <QrCode className="h-5 w-5" />
+            )}
+            <span>Pagar com PIX</span>
+          </button>
+          <button
+            type="button"
+            disabled={loadingCard}
+            onClick={handleCardClick}
+            className={selectedMethod === "card" ? BUDGET_METHOD_ACTIVE : BUDGET_METHOD_IDLE}
+          >
+            {loadingCard ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <CreditCard className="h-5 w-5" />
+            )}
+            <span className="text-center leading-tight">Pagar com cartão de crédito</span>
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {!publicToken && (
-            <ActionButton variant="secondary" size="sm" loading={loadingLink} icon={<Link2 className="h-4 w-4" />} onClick={onPublicLink}>
-              Copiar link para cliente
-            </ActionButton>
-          )}
-          <ActionButton variant="neutral" size="sm" loading={loadingVerify} icon={<RefreshCw className="h-4 w-4" />} onClick={onVerify}>
-            Verificar pagamento
-          </ActionButton>
-        </div>
-
-        {(showPix || showCard) && (
-          <div className="flex gap-1 border-b border-slate-200 pb-0">
-            {showPix && (
-              <button
-                type="button"
-                onClick={() => setActiveTab("pix")}
-                className={`px-4 py-2 rounded-t-lg text-xs transition-colors ${activeTab === "pix" ? TAB_ACTIVE : TAB_IDLE}`}
-              >
-                PIX
-              </button>
-            )}
-            {showCard && (
-              <button
-                type="button"
-                onClick={() => setActiveTab("card")}
-                className={`px-4 py-2 rounded-t-lg text-xs transition-colors ${activeTab === "card" ? TAB_ACTIVE : TAB_IDLE}`}
-              >
-                Cartão
-              </button>
-            )}
+        {selectedMethod === "pix" && hasPix && payment?.pixQrCodeUrl && !pixAmountMismatch && (
+          <div className="flex justify-center pt-1">
+            <img
+              src={payment.pixQrCodeUrl}
+              alt="QR Code PIX"
+              className="max-w-[180px] w-full rounded-xl border border-emerald-200 shadow-sm"
+            />
           </div>
-        )}
-
-        {showPix && activeTab === "pix" && (
-          <PixPaymentCard
-            payment={payment}
-            totalFinal={totalFinal}
-            loading={loadingPix}
-            pixExpired={pixExpired}
-            onRefresh={onRefreshPix}
-            onCopy={onCopy}
-            onExpire={onPixExpire}
-          />
-        )}
-
-        {showCard && activeTab === "card" && (
-          <CreditCardPaymentCard
-            payment={payment}
-            loading={loadingCard}
-            onRegenerate={onGenerateCard}
-            onCopy={onCopy}
-          />
-        )}
-
-        {publicUrl && !publicToken && !compact && (
-          <p className="text-[10px] text-slate-500 break-all border-t border-slate-100 pt-3">
-            Link cliente: {publicUrl}
-          </p>
         )}
       </div>
     </SummaryCard>

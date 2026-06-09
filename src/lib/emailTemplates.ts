@@ -13,6 +13,11 @@ const CONTACT_EMAIL =
 
 const BRAND_BLUE = "#2563EB";
 const BRAND_BLUE_DARK = "#1d4ed8";
+const BRAND_GREEN = "#059669";
+
+function appUrlForEmail(): string {
+  return (process.env.APP_URL || "https://gestao-de-assistencia.vercel.app").replace(/\/$/, "");
+}
 
 const fmt = (value: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -133,33 +138,41 @@ function paymentOptionsBlock(request: MaintenanceRequest): string {
     </table>`;
 
   if (hasCard) {
-    const url = escapeHref(cardUrl);
+    const url = escapeHref(cardUrl!);
     html += `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;background-color:#eff6ff;border:1px solid #93c5fd;border-radius:12px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 12px;background-color:#eff6ff;border:1px solid #93c5fd;border-radius:12px;">
       <tr>
-        <td style="padding:20px;">
-          <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#1e40af;text-transform:uppercase;">Cartão de crédito</p>
+        <td style="padding:20px;text-align:center;">
           <a href="${url}" style="display:inline-block;padding:14px 28px;background-color:${BRAND_BLUE};color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;">
             Pagar com cartão de crédito
           </a>
-          <p style="margin:12px 0 0;font-size:11px;color:#64748b;word-break:break-all;">
-            <a href="${url}" style="color:#2563eb;">${escapeHtml(cardUrl)}</a>
-          </p>
         </td>
       </tr>
     </table>`;
   }
 
   if (hasPix) {
+    const publicToken = payment.publicToken?.trim();
+    const pixPayUrl = publicToken
+      ? escapeHref(`${appUrlForEmail()}/pagamento/${publicToken}`)
+      : null;
     html += `
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;background-color:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;">
       <tr>
-        <td style="padding:20px;">
-          <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#047857;text-transform:uppercase;">PIX copia e cola</p>
-          <p style="margin:0 0 8px;font-size:11px;color:#64748b;">Copie o código abaixo no app do seu banco. Válido até confirmação do pagamento.</p>
-          <div style="background-color:#ffffff;border:1px solid #a7f3d0;border-radius:8px;padding:12px;font-family:monospace;font-size:10px;color:#0f172a;word-break:break-all;line-height:1.5;">
-            ${escapeHtml(pixCode)}
-          </div>
+        <td style="padding:20px;text-align:center;">
+          ${
+            pixPayUrl
+              ? `<a href="${pixPayUrl}" style="display:inline-block;padding:14px 28px;background-color:${BRAND_GREEN};color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;">
+            Pagar com PIX
+          </a>
+          <p style="margin:12px 0 0;font-size:11px;color:#64748b;line-height:1.5;">
+            Abra o link acima para copiar o código PIX no app do seu banco.
+          </p>`
+              : `<p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#047857;text-transform:uppercase;">Pagar com PIX</p>
+          <p style="margin:0;font-size:11px;color:#64748b;line-height:1.5;">
+            Escaneie o QR Code no PDF anexo ou copie o código PIX indicado no documento.
+          </p>`
+          }
         </td>
       </tr>
     </table>`;
@@ -346,10 +359,13 @@ export function buildBudgetEmailText(request: MaintenanceRequest): string {
   if ((budget.shipping || 0) > 0 && !budget.isWarranty && (paymentUrl || pixCode)) {
     lines.push("", "Opções de pagamento:");
     if (paymentUrl) {
-      lines.push(`Pagamento com cartão: ${paymentUrl}`);
+      lines.push(`Pagar com cartão: ${paymentUrl}`);
     }
-    if (pixCode) {
-      lines.push(`PIX copia e cola: ${pixCode}`);
+    const publicToken = request.budgetPayment?.publicToken?.trim();
+    if (pixCode && publicToken) {
+      lines.push(`Pagar com PIX: ${appUrlForEmail()}/pagamento/${publicToken}`);
+    } else if (pixCode) {
+      lines.push("Pagar com PIX: consulte o QR Code no PDF anexo.");
     }
   }
 
