@@ -8,7 +8,6 @@ import { Copy, RefreshCw } from "lucide-react";
 import { BudgetPayment } from "../../types";
 import { formatCurrency } from "../../utils";
 import ActionButton from "../ui/ActionButton";
-import CountdownTimer from "../ui/CountdownTimer";
 
 interface PixPaymentCardProps {
   payment: BudgetPayment;
@@ -27,7 +26,6 @@ export default function PixPaymentCard({
   pixExpired,
   onRefresh,
   onCopy,
-  onExpire,
 }: PixPaymentCardProps) {
   const amount = (payment.amountCents ?? 0) / 100;
   const mismatch = Math.round(totalFinal * 100) !== payment.amountCents;
@@ -84,7 +82,9 @@ export default function PixPaymentCard({
         </div>
       </div>
 
-      <CountdownTimer expiresAt={payment.pixExpiresAt} onExpire={onExpire} />
+      <p className="text-[11px] text-emerald-700 font-medium">
+        Válido até confirmação do pagamento
+      </p>
     </div>
   );
 }

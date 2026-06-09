@@ -107,24 +107,65 @@ export function emailRequestDisplayId(request: MaintenanceRequest): string {
   return formatRequestDisplayId(request.id, request.columnId);
 }
 
-function paymentCta(request: MaintenanceRequest): string {
+function paymentOptionsBlock(request: MaintenanceRequest): string {
   const payment = request.budgetPayment;
-  if (!payment || request.budget?.isWarranty) return "";
+  const budget = request.budget;
+  if (!payment || budget?.isWarranty) return "";
+  if ((budget.shipping || 0) <= 0) return "";
 
   const cardUrl = payment.paymentLinkUrl?.trim();
-  if (!cardUrl || !cardUrl.includes("pagar.me")) return "";
+  const pixCode = payment.pixQrCode?.trim();
+  const hasCard = !!cardUrl && cardUrl.includes("pagar.me");
+  const hasPix = !!pixCode;
 
-  const url = escapeHref(cardUrl);
-  return `
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;">
+  if (!hasCard && !hasPix) return "";
+
+  const totalLabel = fmt(budget.totalFinal);
+  let html = `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 0;">
       <tr>
-        <td align="center">
-          <a href="${url}" style="display:inline-block;padding:14px 28px;background-color:${BRAND_BLUE};color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;">
-            Pagar com cartão de crédito
-          </a>
+        <td>
+          <p style="margin:0 0 16px;font-size:13px;font-weight:700;color:#0f172a;text-transform:uppercase;letter-spacing:0.05em;">
+            Opções de pagamento — ${escapeHtml(totalLabel)}
+          </p>
         </td>
       </tr>
     </table>`;
+
+  if (hasCard) {
+    const url = escapeHref(cardUrl);
+    html += `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;background-color:#eff6ff;border:1px solid #93c5fd;border-radius:12px;">
+      <tr>
+        <td style="padding:20px;">
+          <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#1e40af;text-transform:uppercase;">Cartão de crédito</p>
+          <a href="${url}" style="display:inline-block;padding:14px 28px;background-color:${BRAND_BLUE};color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;">
+            Pagar com cartão de crédito
+          </a>
+          <p style="margin:12px 0 0;font-size:11px;color:#64748b;word-break:break-all;">
+            <a href="${url}" style="color:#2563eb;">${escapeHtml(cardUrl)}</a>
+          </p>
+        </td>
+      </tr>
+    </table>`;
+  }
+
+  if (hasPix) {
+    html += `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;background-color:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;">
+      <tr>
+        <td style="padding:20px;">
+          <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#047857;text-transform:uppercase;">PIX copia e cola</p>
+          <p style="margin:0 0 8px;font-size:11px;color:#64748b;">Copie o código abaixo no app do seu banco. Válido até confirmação do pagamento.</p>
+          <div style="background-color:#ffffff;border:1px solid #a7f3d0;border-radius:8px;padding:12px;font-family:monospace;font-size:10px;color:#0f172a;word-break:break-all;line-height:1.5;">
+            ${escapeHtml(pixCode)}
+          </div>
+        </td>
+      </tr>
+    </table>`;
+  }
+
+  return html;
 }
 
 export function buildBudgetEmailHtml(request: MaintenanceRequest): string {
@@ -148,7 +189,7 @@ export function buildBudgetEmailHtml(request: MaintenanceRequest): string {
       ${summaryRow("Valor total", escapeHtml(totalLabel))}
       ${budget.shipping && budget.shipping > 0 ? summaryRow("Frete", escapeHtml(fmt(budget.shipping) + (budget.shippingService ? ` (${budget.shippingService})` : ""))) : ""}
     </table>
-    ${paymentCta(request)}`;
+    ${paymentOptionsBlock(request)}`;
 
   return emailLayout("Seu Orçamento de Manutenção", body);
 }
@@ -282,6 +323,7 @@ export function buildBudgetEmailText(request: MaintenanceRequest): string {
     : fmt(budget.totalFinal);
 
   const paymentUrl = request.budgetPayment?.paymentLinkUrl;
+  const pixCode = request.budgetPayment?.pixQrCode;
 
   const lines = [
     `Olá, ${request.clientName}!`,
@@ -301,8 +343,14 @@ export function buildBudgetEmailText(request: MaintenanceRequest): string {
     );
   }
 
-  if (paymentUrl) {
-    lines.push("", `Pagamento com cartão: ${paymentUrl}`);
+  if ((budget.shipping || 0) > 0 && !budget.isWarranty && (paymentUrl || pixCode)) {
+    lines.push("", "Opções de pagamento:");
+    if (paymentUrl) {
+      lines.push(`Pagamento com cartão: ${paymentUrl}`);
+    }
+    if (pixCode) {
+      lines.push(`PIX copia e cola: ${pixCode}`);
+    }
   }
 
   lines.push(emailTextFooter());

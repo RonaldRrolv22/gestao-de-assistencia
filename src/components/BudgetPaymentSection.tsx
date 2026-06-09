@@ -73,8 +73,7 @@ export default function BudgetPaymentSection({
     setPayment((local) => {
       const liveCents = Math.round(totalFinalRef.current * 100);
       if (
-        local?.method === "pix" &&
-        local.status === "pending" &&
+        local?.status === "pending" &&
         local.pixQrCode &&
         local.amountCents === liveCents &&
         remote.amountCents !== liveCents
@@ -166,7 +165,6 @@ export default function BudgetPaymentSection({
   const pixAmountMismatch =
     !compact &&
     !request.budget?.isWarranty &&
-    payment?.method === "pix" &&
     payment?.status === "pending" &&
     !!payment?.pixQrCode &&
     liveAmountCents > 0 &&
@@ -178,7 +176,6 @@ export default function BudgetPaymentSection({
     const newCents = Math.round(totalFinal * 100);
     if (newCents <= 0) return;
     if (!payment?.pixQrCode || payment.status !== "pending") return;
-    if (payment.method && payment.method !== "pix") return;
     if (payment.amountCents === newCents) return;
 
     setSyncingPix(true);
@@ -195,7 +192,6 @@ export default function BudgetPaymentSection({
     totalFinal,
     payment?.amountCents,
     payment?.pixQrCode,
-    payment?.method,
     payment?.status,
     compact,
     request.budget?.isWarranty,

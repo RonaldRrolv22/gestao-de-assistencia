@@ -77,25 +77,21 @@ export default function PaymentPanel({
   onCopy,
 }: PaymentPanelProps) {
   const status = STATUS_MAP[payment?.status || "none"];
-  const [selectedMethod, setSelectedMethod] = useState<"pix" | "card">(
-    payment?.method === "credit_card" ? "card" : "pix"
-  );
-  const [activeTab, setActiveTab] = useState<"pix" | "card">(
-    payment?.method === "credit_card" ? "card" : "pix"
-  );
+  const [selectedMethod, setSelectedMethod] = useState<"pix" | "card">("pix");
+  const [activeTab, setActiveTab] = useState<"pix" | "card">("pix");
+
+  const showPix = !!payment?.pixQrCode;
+  const showCard = !!payment?.paymentLinkUrl;
 
   useEffect(() => {
-    if (payment?.method === "credit_card") {
-      setSelectedMethod("card");
-      setActiveTab("card");
-    } else if (payment?.method === "pix") {
-      setSelectedMethod("pix");
+    if (showPix && !showCard) {
       setActiveTab("pix");
+      setSelectedMethod("pix");
+    } else if (showCard && !showPix) {
+      setActiveTab("card");
+      setSelectedMethod("card");
     }
-  }, [payment?.method]);
-
-  const showPix = payment?.method === "pix" && payment.pixQrCode;
-  const showCard = payment?.method === "credit_card" && payment.paymentLinkUrl;
+  }, [showPix, showCard]);
 
   return (
     <SummaryCard
@@ -113,16 +109,22 @@ export default function PaymentPanel({
           <p className="text-3xl sm:text-4xl font-bold text-slate-900 mt-1 tracking-tight">{formatCurrency(totalFinal)}</p>
         </div>
 
-        {shipping <= 0 && !payment?.paymentLinkUrl && (
+        {shipping <= 0 && !showCard && !showPix && (
           <div className="flex gap-2.5 text-amber-900 bg-amber-50 border border-amber-200/80 rounded-xl p-3.5 text-xs leading-relaxed">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
-            <span>Defina o frete para gerar automaticamente o link de pagamento com cartão.</span>
+            <span>Defina o frete para gerar automaticamente as opções de pagamento (cartão e PIX).</span>
           </div>
         )}
-        {payment?.paymentLinkUrl && shipping > 0 && (
+        {shipping > 0 && (showCard || showPix) && (
           <div className="flex gap-2.5 text-emerald-900 bg-emerald-50 border border-emerald-200/80 rounded-xl p-3.5 text-xs leading-relaxed">
             <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
-            <span>Link de cartão gerado automaticamente ao definir o frete.</span>
+            <span>
+              {showCard && showPix
+                ? "Cartão e PIX gerados automaticamente ao definir o frete."
+                : showCard
+                  ? "Link de cartão gerado automaticamente ao definir o frete."
+                  : "PIX gerado automaticamente ao definir o frete."}
+            </span>
           </div>
         )}
         {error && (

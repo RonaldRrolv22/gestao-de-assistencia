@@ -35,6 +35,9 @@ interface PagarmePaymentLink {
   order?: PagarmeOrder;
 }
 
+/** Prazo máximo permitido pela API Pagar.me (~10 anos). */
+export const PIX_EXPIRES_IN_SECONDS = 315_360_000;
+
 function appUrl(): string {
   return process.env.APP_URL || "http://localhost:3000";
 }
@@ -248,10 +251,9 @@ export function isCardPaymentLinkCurrent(
   const url = payment?.paymentLinkUrl?.trim() || "";
   if (
     !url ||
-    payment?.method !== "credit_card" ||
-    payment.status === "paid" ||
-    payment.status === "expired" ||
-    !payment.pagarmePaymentLinkId ||
+    payment?.status === "paid" ||
+    payment?.status === "expired" ||
+    !payment?.pagarmePaymentLinkId ||
     payment.amountCents !== amountCents
   ) {
     return false;
@@ -261,17 +263,13 @@ export function isCardPaymentLinkCurrent(
   return true;
 }
 
-function isPixStillValid(payment: BudgetPayment, amountCents: number): boolean {
+export function isPixStillValid(payment: BudgetPayment, amountCents: number): boolean {
   if (
-    payment.method !== "pix" ||
     payment.status !== "pending" ||
     !payment.pixQrCode ||
     !payment.pagarmeOrderId ||
     payment.amountCents !== amountCents
   ) {
-    return false;
-  }
-  if (payment.pixExpiresAt && new Date(payment.pixExpiresAt) <= new Date()) {
     return false;
   }
   return true;
@@ -308,7 +306,7 @@ export async function createPixPayment(
     payments: [
       {
         payment_method: "pix",
-        pix: { expires_in: 3600 },
+        pix: { expires_in: PIX_EXPIRES_IN_SECONDS },
       },
     ],
     metadata: {
@@ -322,7 +320,7 @@ export async function createPixPayment(
   const tx = charge?.last_transaction;
 
   const payment: BudgetPayment = {
-    ...(req.budgetPayment || { status: "none", amountCents: 0 }),
+    ...(existing || { status: "none", amountCents: 0 }),
     status: "pending",
     method: "pix",
     pagarmeOrderId: order.id,
@@ -331,6 +329,8 @@ export async function createPixPayment(
     pixQrCodeUrl: tx?.qr_code_url,
     pixExpiresAt: tx?.expires_at,
     amountCents,
+    paymentLinkUrl: existing?.paymentLinkUrl,
+    pagarmePaymentLinkId: existing?.pagarmePaymentLinkId,
   };
 
   await saveBudgetPayment(docId, payment);
@@ -391,13 +391,19 @@ export async function createCardPaymentLink(
     );
   }
 
+  const existing = req.budgetPayment;
   const payment: BudgetPayment = {
-    ...(req.budgetPayment || { status: "none", amountCents: 0 }),
+    ...(existing || { status: "none", amountCents: 0 }),
     status: "pending",
     method: "credit_card",
     pagarmePaymentLinkId: link.id,
     paymentLinkUrl: link.url,
     amountCents,
+    pagarmeOrderId: existing?.pagarmeOrderId,
+    pagarmeChargeId: existing?.pagarmeChargeId,
+    pixQrCode: existing?.pixQrCode,
+    pixQrCodeUrl: existing?.pixQrCodeUrl,
+    pixExpiresAt: existing?.pixExpiresAt,
   };
 
   await saveBudgetPayment(docId, payment);

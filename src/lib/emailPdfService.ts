@@ -15,7 +15,9 @@ import { getAdminDb } from "./firebaseAdmin";
 import { sanitizeRequestDocId } from "../services/requestIds";
 import {
   createCardPaymentLink,
+  createPixPayment,
   isCardPaymentLinkCurrent,
+  isPixStillValid,
 } from "../services/pagarmePaymentService";
 
 const REQUESTS_COLLECTION = "maintenance_requests";
@@ -30,20 +32,36 @@ async function loadRequest(requestId: string): Promise<MaintenanceRequest> {
   return { ...data, id: data.id || requestId };
 }
 
-export async function ensureCardPaymentLinkForRequest(
+export async function ensurePaymentMethodsForRequest(
   request: MaintenanceRequest
 ): Promise<MaintenanceRequest> {
   const budget = request.budget;
   if (!budget || budget.isWarranty || budget.totalFinal <= 0) return request;
 
   const shipping = budget.shipping || 0;
+  if (shipping <= 0) return request;
+
   const amountCents = Math.round(budget.totalFinal * 100);
-  if (isCardPaymentLinkCurrent(request.budgetPayment, amountCents, shipping)) {
-    return request;
+  const payment = request.budgetPayment;
+
+  if (!isCardPaymentLinkCurrent(payment, amountCents, shipping)) {
+    await createCardPaymentLink(request.id, { amountCents });
+    request = await loadRequest(request.id);
   }
 
-  await createCardPaymentLink(request.id, { amountCents });
-  return loadRequest(request.id);
+  if (!request.budgetPayment || !isPixStillValid(request.budgetPayment, amountCents)) {
+    await createPixPayment(request.id, { amountCents });
+    request = await loadRequest(request.id);
+  }
+
+  return request;
+}
+
+/** @deprecated Use ensurePaymentMethodsForRequest */
+export async function ensureCardPaymentLinkForRequest(
+  request: MaintenanceRequest
+): Promise<MaintenanceRequest> {
+  return ensurePaymentMethodsForRequest(request);
 }
 
 export async function generateBudgetPdfBuffer(request: MaintenanceRequest): Promise<Buffer> {

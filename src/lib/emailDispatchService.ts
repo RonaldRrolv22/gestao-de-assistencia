@@ -34,7 +34,7 @@ import {
 import {
   generateBudgetPdfBuffer,
   generateRatPdfBuffer,
-  ensureCardPaymentLinkForRequest,
+  ensurePaymentMethodsForRequest,
 } from "./emailPdfService";
 
 const REQUESTS_COLLECTION = "maintenance_requests";
@@ -238,7 +238,7 @@ export async function dispatchBudgetEmail(
     throw new Error("Esta O.S. ainda não possui orçamento gerado.");
   }
 
-  request = await ensureCardPaymentLinkForRequest(request);
+  request = await ensurePaymentMethodsForRequest(request);
 
   const pdfBuffer = await generateBudgetPdfBuffer(request);
   const pdfFilename = safePdfFilename(`Orcamento_${request.id}`);

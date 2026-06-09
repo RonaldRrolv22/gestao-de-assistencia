@@ -23,7 +23,7 @@ import {
 import { formatCurrency, formatDate } from "../utils";
 import { downloadHtmlAsPdf } from "../utils/pdfExport";
 import { buildBudgetCommercialHtml, buildFreteSummaryLabel, resolveBudgetPdfPaymentInfo } from "../utils/budgetCommercialPdf";
-import { generateCardLink } from "../services/pagarmeApi";
+import { generateCardLink, generatePixPayment } from "../services/pagarmeApi";
 import BudgetCommercialPaymentBlock from "./budget/BudgetCommercialPaymentBlock";
 import BudgetPaymentSection from "./BudgetPaymentSection";
 import { formatRequestDisplayId } from "../services/requestIds";
@@ -113,7 +113,9 @@ export default function BudgetModal({
   const [exportingPdf, setExportingPdf] = useState(false);
   const [paymentSnapshot, setPaymentSnapshot] = useState<BudgetPayment | undefined>(request.budgetPayment);
   const [autoCardLoading, setAutoCardLoading] = useState(false);
+  const [autoPixLoading, setAutoPixLoading] = useState(false);
   const [autoCardError, setAutoCardError] = useState<string | null>(null);
+  const [autoPixError, setAutoPixError] = useState<string | null>(null);
   const paymentSnapshotRef = useRef(paymentSnapshot);
   paymentSnapshotRef.current = paymentSnapshot;
   const calculatedTotalRef = useRef(0);
@@ -189,24 +191,45 @@ export default function BudgetModal({
     const timer = setTimeout(async () => {
       const amountCents = Math.round(calculatedTotalRef.current * 100);
       const current = paymentSnapshotRef.current;
-      if (
+      const cardCurrent =
         current?.paymentLinkUrl &&
-        current.amountCents === amountCents &&
-        current.method === "credit_card"
-      ) {
-        return;
+        current.amountCents === amountCents;
+      const pixCurrent =
+        current?.pixQrCode &&
+        current.amountCents === amountCents;
+
+      if (cardCurrent && pixCurrent) return;
+
+      setAutoCardLoading(!cardCurrent);
+      setAutoPixLoading(!pixCurrent);
+      setAutoCardError(null);
+      setAutoPixError(null);
+
+      const tasks: Promise<void>[] = [];
+
+      if (!cardCurrent) {
+        tasks.push(
+          generateCardLink(request.id, amountCents)
+            .then((result) => setPaymentSnapshot((prev) => ({ ...prev, ...result })))
+            .catch((err) =>
+              setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.")
+            )
+            .finally(() => setAutoCardLoading(false))
+        );
       }
 
-      setAutoCardLoading(true);
-      setAutoCardError(null);
-      try {
-        const result = await generateCardLink(request.id, amountCents);
-        setPaymentSnapshot(result);
-      } catch (err) {
-        setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
-      } finally {
-        setAutoCardLoading(false);
+      if (!pixCurrent) {
+        tasks.push(
+          generatePixPayment(request.id, false, amountCents)
+            .then((result) => setPaymentSnapshot((prev) => ({ ...prev, ...result })))
+            .catch((err) =>
+              setAutoPixError(err instanceof Error ? err.message : "Erro ao gerar PIX.")
+            )
+            .finally(() => setAutoPixLoading(false))
+        );
       }
+
+      await Promise.all(tasks);
     }, 800);
 
     return () => clearTimeout(timer);
@@ -436,7 +459,8 @@ export default function BudgetModal({
     isWarranty,
     calculatedTotal,
     shipping,
-    autoCardError
+    autoCardError,
+    autoPixError
   );
 
   const handleSendEmail = async () => {
@@ -771,7 +795,11 @@ export default function BudgetModal({
                 </div>
               </div>
 
-              <BudgetCommercialPaymentBlock info={pdfPaymentInfo} loading={autoCardLoading} />
+              <BudgetCommercialPaymentBlock
+                info={pdfPaymentInfo}
+                loadingCard={autoCardLoading}
+                loadingPix={autoPixLoading}
+              />
 
               {/* Approval signatory frame */}
               <div className="mt-12 pt-10 border-t border-dashed border-slate-300">
