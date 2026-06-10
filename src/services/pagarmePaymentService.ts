@@ -9,11 +9,12 @@ import { pagarmeRequest } from "../lib/pagarmeClient";
 import { BudgetPayment, Client, MaintenanceRequest } from "../types";
 import { sanitizeRequestDocId } from "./requestIds";
 import {
+  isCardLinkSynced,
   isCardPaymentLinkCurrent,
   isPixStillValid,
 } from "../utils/budgetPaymentSync";
 
-export { isCardPaymentLinkCurrent, isPixStillValid };
+export { isCardLinkSynced, isCardPaymentLinkCurrent, isPixStillValid };
 
 type RequestDoc = MaintenanceRequest & { budgetPayment?: BudgetPayment };
 
@@ -333,15 +334,12 @@ export async function createCardPaymentLink(
   }
 
   const amountCents = resolveAmountCents(req, options?.amountCents);
-  const shipping = req.budget?.shipping ?? 0;
   const existing = req.budgetPayment;
-  const existingCardCents = existing?.cardLinkAmountCents;
 
   if (
     !options?.forceRefresh &&
     existing &&
-    existingCardCents === amountCents &&
-    isCardPaymentLinkCurrent(existing, amountCents, shipping)
+    isCardLinkSynced(existing, amountCents)
   ) {
     return { ...existing, requestId: req.id };
   }

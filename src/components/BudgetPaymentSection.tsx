@@ -16,7 +16,7 @@ import {
 } from "../services/pagarmeApi";
 import { CheckCircle2 } from "lucide-react";
 import PaymentPanel from "./payment/PaymentPanel";
-import { isCardPaymentLinkCurrent, isPixStillValid, mergeBudgetPaymentSnapshot } from "../utils/budgetPaymentSync";
+import { isCardLinkSynced, isPixStillValid, mergeBudgetPaymentSnapshot } from "../utils/budgetPaymentSync";
 
 interface BudgetPaymentSectionProps {
   request: MaintenanceRequest;
@@ -58,6 +58,7 @@ export default function BudgetPaymentSection({
   const [pixExpired, setPixExpired] = useState(false);
   const totalFinalRef = useRef(totalFinal);
   totalFinalRef.current = totalFinal;
+  const cardSyncInFlightRef = useRef(false);
 
   const notifyPayment = (next: BudgetPayment) => {
     setPayment(next);
@@ -65,16 +66,14 @@ export default function BudgetPaymentSection({
   };
 
   useEffect(() => {
+    const liveCents = Math.round(totalFinalRef.current * 100);
     if (paymentOverride) {
-      setPayment(paymentOverride);
+      setPayment((prev) => mergeBudgetPaymentSnapshot(prev, paymentOverride, liveCents, shipping));
       return;
     }
     const remote = request.budgetPayment;
     if (!remote) return;
-    setPayment((local) => {
-      const liveCents = Math.round(totalFinalRef.current * 100);
-      return mergeBudgetPaymentSnapshot(local, remote, liveCents, shipping);
-    });
+    setPayment((local) => mergeBudgetPaymentSnapshot(local, remote, liveCents, shipping));
     if (remote.publicToken) {
       setPublicUrl(`${window.location.origin}/pagamento/${remote.publicToken}`);
     }
@@ -166,15 +165,18 @@ export default function BudgetPaymentSection({
     payment?.status !== "paid" &&
     !!payment?.paymentLinkUrl &&
     liveAmountCents > 0 &&
-    !isCardPaymentLinkCurrent(payment, liveAmountCents, shipping);
+    !isCardLinkSynced(payment, liveAmountCents);
 
   const handleCard = async (refresh = false) => {
+    if (cardSyncInFlightRef.current || loadingCard || externalLoadingCard) return;
+
     const amountCents = Math.round(totalFinalRef.current * 100);
     if (amountCents <= 0) {
       setError("Informe um valor maior que zero (peças, serviços ou frete) antes de gerar o pagamento.");
       return;
     }
     const forceRefresh = refresh || cardAmountMismatch;
+    cardSyncInFlightRef.current = true;
     setLoadingCard(true);
     setError(null);
     if (forceRefresh) {
@@ -193,14 +195,10 @@ export default function BudgetPaymentSection({
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
     } finally {
+      cardSyncInFlightRef.current = false;
       setLoadingCard(false);
     }
   };
-
-  useEffect(() => {
-    if (!cardAmountMismatch || loadingCard || externalLoadingCard) return;
-    void handleCard();
-  }, [cardAmountMismatch, loadingCard, externalLoadingCard, totalFinal, shipping]);
 
   const handlePublicLink = async () => {
     if (publicUrl && !compact) return;

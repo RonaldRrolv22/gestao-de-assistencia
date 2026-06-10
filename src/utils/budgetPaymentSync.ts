@@ -17,12 +17,8 @@ export function pixChargeAmountCents(payment: BudgetPayment | undefined): number
   return undefined;
 }
 
-export function isCardPaymentLinkCurrent(
-  payment: BudgetPayment | undefined,
-  amountCents: number,
-  shipping: number
-): boolean {
-  if (shipping <= 0) return false;
+/** Valida se o link de cartão está sincronizado com o valor do orçamento (sem depender de frete). */
+export function isCardLinkSynced(payment: BudgetPayment | undefined, amountCents: number): boolean {
   const url = payment?.paymentLinkUrl?.trim() || "";
   if (
     !url ||
@@ -39,6 +35,20 @@ export function isCardPaymentLinkCurrent(
   return true;
 }
 
+export function isCardPaymentLinkCurrent(
+  payment: BudgetPayment | undefined,
+  amountCents: number,
+  shipping: number
+): boolean {
+  if (shipping <= 0) return false;
+  return isCardLinkSynced(payment, amountCents);
+}
+
+export function needsCardSync(payment: BudgetPayment | undefined, amountCents: number): boolean {
+  if (payment?.status === "paid") return false;
+  return !isCardLinkSynced(payment, amountCents);
+}
+
 export function isPixStillValid(payment: BudgetPayment | undefined, amountCents: number): boolean {
   if (
     !payment ||
@@ -52,6 +62,11 @@ export function isPixStillValid(payment: BudgetPayment | undefined, amountCents:
   return pixCents === amountCents;
 }
 
+export function needsPixSync(payment: BudgetPayment | undefined, amountCents: number): boolean {
+  if (payment?.status === "paid") return false;
+  return !isPixStillValid(payment, amountCents);
+}
+
 /** Evita que sync do Firestore (ex.: PIX salvo antes) sobrescreva link de cartão já regenerado. */
 export function mergeBudgetPaymentSnapshot(
   prev: BudgetPayment | undefined,
@@ -62,29 +77,38 @@ export function mergeBudgetPaymentSnapshot(
   if (remote.status === "paid") return remote;
   if (!prev) return remote;
 
-  const remoteCardCurrent = isCardPaymentLinkCurrent(remote, liveAmountCents, shipping);
-  const prevCardCurrent = isCardPaymentLinkCurrent(prev, liveAmountCents, shipping);
-  const remotePixCurrent = isPixStillValid(remote, liveAmountCents);
+  const prevCardSynced = isCardLinkSynced(prev, liveAmountCents);
+  const remoteCardSynced = isCardLinkSynced(remote, liveAmountCents);
   const prevPixCurrent = isPixStillValid(prev, liveAmountCents);
+  const remotePixCurrent = isPixStillValid(remote, liveAmountCents);
 
-  const usePrevCard = prevCardCurrent && !remoteCardCurrent;
+  const prevHasFreshCard =
+    prevCardSynced ||
+    (prev.cardLinkAmountCents === liveAmountCents && !!prev.paymentLinkUrl?.trim());
+  const remoteHasStaleCard =
+    !remoteCardSynced &&
+    (remote.cardLinkAmountCents == null || remote.cardLinkAmountCents !== liveAmountCents);
+
+  const usePrevCard =
+    (prevCardSynced && !remoteCardSynced) ||
+    (prevHasFreshCard && remoteHasStaleCard);
   const usePrevPix = prevPixCurrent && !remotePixCurrent;
 
   return {
     ...remote,
     paymentLinkUrl: usePrevCard
       ? prev.paymentLinkUrl
-      : remoteCardCurrent
+      : remoteCardSynced
         ? remote.paymentLinkUrl
         : prev.paymentLinkUrl || remote.paymentLinkUrl,
     pagarmePaymentLinkId: usePrevCard
       ? prev.pagarmePaymentLinkId
-      : remoteCardCurrent
+      : remoteCardSynced
         ? remote.pagarmePaymentLinkId
         : prev.pagarmePaymentLinkId || remote.pagarmePaymentLinkId,
     cardLinkAmountCents: usePrevCard
       ? prev.cardLinkAmountCents
-      : remoteCardCurrent
+      : remoteCardSynced
         ? remote.cardLinkAmountCents
         : prev.cardLinkAmountCents ?? remote.cardLinkAmountCents,
     pixQrCode: usePrevPix ? prev.pixQrCode : remote.pixQrCode || prev.pixQrCode,

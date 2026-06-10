@@ -24,7 +24,7 @@ import { formatCurrency, formatDate } from "../utils";
 import { downloadHtmlAsPdf } from "../utils/pdfExport";
 import { buildBudgetCommercialHtml, buildFreteSummaryLabel, resolveBudgetPdfPaymentInfo } from "../utils/budgetCommercialPdf";
 import { generateCardLink, generatePixPayment } from "../services/pagarmeApi";
-import { isCardPaymentLinkCurrent, isPixStillValid, mergeBudgetPaymentSnapshot } from "../utils/budgetPaymentSync";
+import { isCardLinkSynced, isPixStillValid, mergeBudgetPaymentSnapshot, needsCardSync, needsPixSync } from "../utils/budgetPaymentSync";
 import BudgetCommercialPaymentBlock from "./budget/BudgetCommercialPaymentBlock";
 import BudgetPaymentSection from "./BudgetPaymentSection";
 import { formatRequestDisplayId } from "../services/requestIds";
@@ -121,6 +121,8 @@ export default function BudgetModal({
   const paymentSnapshotRef = useRef(paymentSnapshot);
   paymentSnapshotRef.current = paymentSnapshot;
   const calculatedTotalRef = useRef(0);
+  const paymentSyncInFlightRef = useRef(false);
+  const lastSyncedAmountCentsRef = useRef<number | null>(null);
 
   useEffect(() => {
     const remote = request.budgetPayment;
@@ -128,12 +130,6 @@ export default function BudgetModal({
     const liveAmountCents = Math.round(calculatedTotalRef.current * 100);
     setPaymentSnapshot((prev) => mergeBudgetPaymentSnapshot(prev, remote, liveAmountCents, shipping));
   }, [request.budgetPayment, shipping]);
-
-  const autoPaymentRequestedRef = useRef<string>("");
-
-  useEffect(() => {
-    autoPaymentRequestedRef.current = "";
-  }, [discount, shipping, isWarranty, budgetProducts, budgetServices]);
 
   // Catalog selectors helper
   const [selectedProductId, setSelectedProductId] = useState("");
@@ -198,24 +194,32 @@ export default function BudgetModal({
     if (calculatedTotal <= 0) return;
     if (budgetProducts.length === 0 && budgetServices.length === 0) return;
     if (paymentSnapshotRef.current?.status === "paid") return;
+    if (paymentSyncInFlightRef.current) return;
 
     const amountCents = Math.round(calculatedTotal * 100);
     const current = paymentSnapshotRef.current;
-    const needsCard = !isCardPaymentLinkCurrent(current, amountCents, shipping);
-    const needsPix = !current?.pixQrCode || !isPixStillValid(current, amountCents);
-    if (!needsCard && !needsPix) return;
+    const needsCard = needsCardSync(current, amountCents);
+    const needsPix = needsPixSync(current, amountCents);
 
-    const attemptKey = `${request.id}:${shipping}:${amountCents}:${needsCard}:${needsPix}`;
-    if (autoPaymentRequestedRef.current === attemptKey) return;
-    autoPaymentRequestedRef.current = attemptKey;
+    if (!needsCard && !needsPix) {
+      lastSyncedAmountCentsRef.current = amountCents;
+      return;
+    }
 
     const timer = setTimeout(async () => {
+      if (paymentSyncInFlightRef.current) return;
+
       const liveAmountCents = Math.round(calculatedTotalRef.current * 100);
       const latest = paymentSnapshotRef.current;
-      const stillNeedsCard = !isCardPaymentLinkCurrent(latest, liveAmountCents, shipping);
-      const stillNeedsPix = !latest?.pixQrCode || !isPixStillValid(latest, liveAmountCents);
-      if (!stillNeedsCard && !stillNeedsPix) return;
+      const stillNeedsCard = needsCardSync(latest, liveAmountCents);
+      const stillNeedsPix = needsPixSync(latest, liveAmountCents);
 
+      if (!stillNeedsCard && !stillNeedsPix) {
+        lastSyncedAmountCentsRef.current = liveAmountCents;
+        return;
+      }
+
+      paymentSyncInFlightRef.current = true;
       setAutoCardLoading(stillNeedsCard);
       setAutoPixLoading(stillNeedsPix);
       setAutoCardError(null);
@@ -235,23 +239,25 @@ export default function BudgetModal({
           approvedDate: request.budget?.approvedDate,
         });
       } catch (err) {
-        autoPaymentRequestedRef.current = "";
+        paymentSyncInFlightRef.current = false;
         setAutoCardError(err instanceof Error ? err.message : "Erro ao salvar orçamento antes do pagamento.");
         setAutoCardLoading(false);
         setAutoPixLoading(false);
         return;
       }
 
-      const pixForceRefresh = !!(latest?.pixQrCode && !isPixStillValid(latest, liveAmountCents));
+      const pixForceRefresh = !!(latest?.pixQrCode && stillNeedsPix);
       let workingSnapshot = latest;
+      let cardOk = !stillNeedsCard;
+      let pixOk = !stillNeedsPix;
 
       if (stillNeedsCard) {
         try {
-          const cardResult = await generateCardLink(request.id, liveAmountCents, stillNeedsCard);
+          const cardResult = await generateCardLink(request.id, liveAmountCents, true);
           workingSnapshot = mergeBudgetPaymentSnapshot(workingSnapshot, cardResult, liveAmountCents, shipping);
           setPaymentSnapshot(workingSnapshot);
+          cardOk = isCardLinkSynced(workingSnapshot, liveAmountCents);
         } catch (err) {
-          autoPaymentRequestedRef.current = "";
           setAutoCardError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
         } finally {
           setAutoCardLoading(false);
@@ -260,13 +266,13 @@ export default function BudgetModal({
         setAutoCardLoading(false);
       }
 
-      if (!workingSnapshot?.pixQrCode || !isPixStillValid(workingSnapshot, liveAmountCents)) {
+      if (stillNeedsPix) {
         try {
           const pixResult = await generatePixPayment(request.id, pixForceRefresh, liveAmountCents);
           workingSnapshot = mergeBudgetPaymentSnapshot(workingSnapshot, pixResult, liveAmountCents, shipping);
           setPaymentSnapshot(workingSnapshot);
+          pixOk = isPixStillValid(workingSnapshot, liveAmountCents);
         } catch (err) {
-          autoPaymentRequestedRef.current = "";
           setAutoPixError(err instanceof Error ? err.message : "Erro ao gerar PIX.");
         } finally {
           setAutoPixLoading(false);
@@ -275,7 +281,10 @@ export default function BudgetModal({
         setAutoPixLoading(false);
       }
 
-      autoPaymentRequestedRef.current = "";
+      paymentSyncInFlightRef.current = false;
+      if (cardOk && pixOk) {
+        lastSyncedAmountCentsRef.current = liveAmountCents;
+      }
     }, 800);
 
     return () => clearTimeout(timer);
@@ -288,9 +297,9 @@ export default function BudgetModal({
     budgetServices.length,
     request.id,
     request.columnId,
-    paymentSnapshot?.pixQrCode,
-    paymentSnapshot?.paymentLinkUrl,
-    paymentSnapshot?.amountCents,
+    finalDiscount,
+    calculatedSubtotal,
+    shippingService,
   ]);
 
   // Handle adding product item
@@ -563,6 +572,10 @@ export default function BudgetModal({
 
   const handlePaymentChange = (payment: BudgetPayment) => {
     setPaymentSnapshot(payment);
+    const liveCents = Math.round(calculatedTotalRef.current * 100);
+    if (isCardLinkSynced(payment, liveCents) && isPixStillValid(payment, liveCents)) {
+      lastSyncedAmountCentsRef.current = liveCents;
+    }
     if (payment.paymentLinkUrl) {
       setAutoCardError(null);
     }
