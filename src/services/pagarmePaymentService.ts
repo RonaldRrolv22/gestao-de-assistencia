@@ -32,6 +32,9 @@ interface PagarmeOrder {
   id?: string;
   status?: string;
   charges?: PagarmeCharge[];
+  metadata?: { requestId?: string; requestDocId?: string; payment_link_id?: string };
+  payment_link_id?: string;
+  checkout?: { payment_link_id?: string };
 }
 
 interface PagarmePaymentLink {
@@ -39,6 +42,12 @@ interface PagarmePaymentLink {
   url?: string;
   status?: string;
   order?: PagarmeOrder;
+  total_paid_sessions?: number;
+  metadata?: { requestId?: string; requestDocId?: string };
+}
+
+interface PagarmeOrderListResponse {
+  data?: PagarmeOrder[];
 }
 
 /** Prazo máximo permitido pela API Pagar.me (~10 anos). */
@@ -430,7 +439,7 @@ async function notifyMaintenanceStartedEmail(req: RequestDoc): Promise<void> {
 }
 
 async function markRequestPaid(docId: string, req: RequestDoc): Promise<RequestDoc> {
-  if (req.columnId === "manutencao" || req.budgetPayment?.status === "paid") {
+  if (req.columnId === "manutencao") {
     if (!req.maintenanceStartedEmailSentAt && !req.paymentConfirmationEmailSentAt) {
       await notifyMaintenanceStartedEmail(req);
     }
@@ -503,6 +512,53 @@ async function findRequestByPagarmeOrderId(
   return { docId: doc.id, data: doc.data() as RequestDoc };
 }
 
+async function findRequestByPagarmePaymentLinkId(
+  paymentLinkId: string
+): Promise<{ docId: string; data: RequestDoc } | null> {
+  const snap = await getAdminDb()
+    .collection("maintenance_requests")
+    .where("budgetPayment.pagarmePaymentLinkId", "==", paymentLinkId)
+    .limit(1)
+    .get();
+
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  return { docId: doc.id, data: doc.data() as RequestDoc };
+}
+
+function isOrderPaid(order?: PagarmeOrder): boolean {
+  if (!order) return false;
+  if (order.status === "paid") return true;
+  return Boolean(order.charges?.some((c) => c.status === "paid"));
+}
+
+async function findPaidOrderForPaymentLink(paymentLinkId: string): Promise<PagarmeOrder | null> {
+  try {
+    const response = await pagarmeRequest<PagarmeOrderListResponse>(
+      "GET",
+      `/orders?payment_link_id=${encodeURIComponent(paymentLinkId)}&status=paid&size=5`
+    );
+    const paid = (response.data || []).find(isOrderPaid);
+    if (paid) return paid;
+  } catch (err) {
+    console.warn("[pagarme] Listagem de pedidos por payment_link_id falhou:", paymentLinkId, err);
+  }
+  return null;
+}
+
+function extractPaymentLinkIdFromOrder(order: PagarmeOrder & Record<string, unknown>): string | undefined {
+  const direct = order.payment_link_id;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const checkout = order.checkout as { payment_link_id?: string } | undefined;
+  if (checkout?.payment_link_id?.trim()) return checkout.payment_link_id.trim();
+
+  const metadataLink = order.metadata?.payment_link_id;
+  if (typeof metadataLink === "string" && metadataLink.trim()) return metadataLink.trim();
+
+  return undefined;
+}
+
 function isWebhookPaidEvent(payload: PagarmeWebhookPayload): boolean {
   const eventType = payload.type || "";
   const order = payload.data;
@@ -537,6 +593,17 @@ export async function handlePagarmeWebhook(payload: PagarmeWebhookPayload): Prom
     if (found) {
       docId = found.docId;
       req = found.data;
+    }
+  }
+
+  if (!req) {
+    const paymentLinkId = extractPaymentLinkIdFromOrder(order as PagarmeOrder & Record<string, unknown>);
+    if (paymentLinkId) {
+      const found = await findRequestByPagarmePaymentLinkId(paymentLinkId);
+      if (found) {
+        docId = found.docId;
+        req = found.data;
+      }
     }
   }
 
@@ -577,9 +644,19 @@ async function resolveRemotePaymentStatus(
       "GET",
       `/paymentlinks/${payment.pagarmePaymentLinkId}`
     );
-    if (link.status === "paid" || link.order?.status === "paid") {
-      return { status: "paid", orderId: link.order?.id || orderId };
+
+    const paidOrder =
+      (link.order && isOrderPaid(link.order) ? link.order : null) ||
+      (await findPaidOrderForPaymentLink(payment.pagarmePaymentLinkId));
+
+    if (paidOrder) {
+      return { status: "paid", orderId: paidOrder.id || orderId };
     }
+
+    if ((link.total_paid_sessions ?? 0) > 0) {
+      return { status: "paid", orderId };
+    }
+
     if (link.status === "expired" && status === "pending" && !payment.pixQrCode) {
       status = "expired";
     }
@@ -600,8 +677,13 @@ export async function checkPaymentStatus(requestId: string): Promise<{
     return { status: "none", request: req, paid: false };
   }
 
-  if (payment.status === "paid" || req.columnId === "manutencao") {
+  if (req.columnId === "manutencao") {
     return { status: "paid", request: req, paid: true };
+  }
+
+  if (payment.status === "paid") {
+    const updated = await markRequestPaid(docId, req);
+    return { status: "paid", request: updated, paid: true };
   }
 
   const { status: remoteStatus, orderId } = await resolveRemotePaymentStatus(payment);
@@ -619,7 +701,14 @@ export async function checkPaymentStatus(requestId: string): Promise<{
   }
 
   if (effectiveStatus === "paid") {
-    const updated = await markRequestPaid(docId, req);
+    const reqWithOrder: RequestDoc = {
+      ...req,
+      budgetPayment: {
+        ...payment,
+        ...(orderId ? { pagarmeOrderId: orderId } : {}),
+      },
+    };
+    const updated = await markRequestPaid(docId, reqWithOrder);
     return { status: "paid", request: updated, paid: true };
   }
 
@@ -640,6 +729,38 @@ export async function forceConfirmPaymentForTest(requestId: string): Promise<Req
 export async function checkPaymentStatusByToken(token: string) {
   const { data: req } = await loadRequestByPublicToken(token);
   return checkPaymentStatus(req.id);
+}
+
+/** Verifica O.S. pendentes no Firestore e move para manutenção quando o pagamento for confirmado. */
+export async function pollPendingPayments(): Promise<{ checked: number; moved: number }> {
+  const snap = await getAdminDb()
+    .collection("maintenance_requests")
+    .where("columnId", "==", "orcamento")
+    .get();
+
+  let checked = 0;
+  let moved = 0;
+
+  for (const doc of snap.docs) {
+    const req = { ...(doc.data() as RequestDoc), id: (doc.data() as RequestDoc).id || doc.id };
+    if (req.budget?.isWarranty) continue;
+
+    const payment = req.budgetPayment;
+    if (!payment || payment.status === "paid" || payment.status === "none") continue;
+    if (!payment.pagarmePaymentLinkId && !payment.pagarmeOrderId && !payment.pixQrCode) continue;
+
+    checked += 1;
+    try {
+      const result = await checkPaymentStatus(req.id);
+      if (result.paid && result.request.columnId === "manutencao") {
+        moved += 1;
+      }
+    } catch (err) {
+      console.warn("[pagarme-poll] Falha ao verificar pagamento:", req.id, err);
+    }
+  }
+
+  return { checked, moved };
 }
 
 export async function createPublicPaymentToken(requestId: string): Promise<{ url: string; token: string }> {

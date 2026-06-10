@@ -16,6 +16,7 @@ import {
   createCardPaymentLinkByToken,
   checkPaymentStatusByToken,
   handlePagarmeWebhook,
+  pollPendingPayments,
 } from "./src/services/pagarmePaymentService";
 import { PROTECTED_USER_EMAILS } from "./src/services/userRoles";
 import {
@@ -814,6 +815,20 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
       return res.status(400).json({ error: "STATUS_FAILED", message });
     }
   });
+
+  const handlePollPending = async (_req: express.Request, res: express.Response) => {
+    try {
+      const result = await pollPendingPayments();
+      return res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao verificar pagamentos pendentes.";
+      console.error("GET/POST /api/pagarme/poll-pending:", err);
+      return res.status(500).json({ error: "POLL_FAILED", message });
+    }
+  };
+
+  app.get("/api/pagarme/poll-pending", handlePollPending);
+  app.post("/api/pagarme/poll-pending", handlePollPending);
 
   app.post("/api/pagarme/public-token", async (req, res) => {
     try {

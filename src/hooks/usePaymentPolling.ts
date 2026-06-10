@@ -24,8 +24,13 @@ export function usePaymentPolling(requests: MaintenanceRequest[], enabled: boole
       const pending = requestsRef.current.filter(
         (r) =>
           r.columnId === "orcamento" &&
-          r.budgetPayment?.status === "pending" &&
-          !r.budget?.isWarranty
+          !r.budget?.isWarranty &&
+          r.budgetPayment &&
+          r.budgetPayment.status !== "paid" &&
+          (r.budgetPayment.status === "pending" ||
+            Boolean(r.budgetPayment.pagarmePaymentLinkId) ||
+            Boolean(r.budgetPayment.pagarmeOrderId) ||
+            Boolean(r.budgetPayment.pixQrCode))
       );
 
       for (const req of pending) {
