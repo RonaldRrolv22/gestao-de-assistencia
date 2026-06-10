@@ -20,6 +20,7 @@ type RequestDoc = MaintenanceRequest & { budgetPayment?: BudgetPayment };
 interface PagarmeCharge {
   id?: string;
   status?: string;
+  amount?: number;
   last_transaction?: {
     qr_code?: string;
     qr_code_url?: string;
@@ -31,6 +32,7 @@ interface PagarmeCharge {
 interface PagarmeOrder {
   id?: string;
   status?: string;
+  amount?: number;
   charges?: PagarmeCharge[];
   metadata?: { requestId?: string; requestDocId?: string; payment_link_id?: string };
   payment_link_id?: string;
@@ -532,13 +534,61 @@ function isOrderPaid(order?: PagarmeOrder): boolean {
   return Boolean(order.charges?.some((c) => c.status === "paid"));
 }
 
-async function findPaidOrderForPaymentLink(paymentLinkId: string): Promise<PagarmeOrder | null> {
+function orderAmountCents(order: PagarmeOrder): number | undefined {
+  if (typeof order.amount === "number") return order.amount;
+  const paidCharge = order.charges?.find((c) => c.status === "paid") ?? order.charges?.[0];
+  return typeof paidCharge?.amount === "number" ? paidCharge.amount : undefined;
+}
+
+function expectedPaymentAmountsCents(payment: BudgetPayment): number[] {
+  const amounts = new Set<number>();
+  if (payment.cardLinkAmountCents != null) amounts.add(payment.cardLinkAmountCents);
+  if (payment.pixAmountCents != null) amounts.add(payment.pixAmountCents);
+  if (payment.amountCents > 0) amounts.add(payment.amountCents);
+  return [...amounts];
+}
+
+/** Só confirma pagamento se o pedido pago pertence a esta O.S. e ao valor esperado. */
+function isPaidOrderMatchingRequest(
+  order: PagarmeOrder,
+  payment: BudgetPayment,
+  request: RequestDoc
+): boolean {
+  if (!isOrderPaid(order)) return false;
+
+  const metaRequestId = order.metadata?.requestId?.trim();
+  if (metaRequestId && metaRequestId !== request.id) return false;
+
+  const metaDocId = order.metadata?.requestDocId?.trim();
+  if (metaDocId && metaDocId !== sanitizeRequestDocId(request.id)) return false;
+
+  const paidAmount = orderAmountCents(order);
+  const expectedAmounts = expectedPaymentAmountsCents(payment);
+  const budgetCents = Math.round(effectiveBudgetTotal(request.budget) * 100);
+
+  if (paidAmount == null) {
+    return Boolean(metaRequestId || metaDocId);
+  }
+
+  if (expectedAmounts.includes(paidAmount)) return true;
+  if (budgetCents > 0 && paidAmount === budgetCents) return true;
+
+  return false;
+}
+
+async function findPaidOrderForPaymentLink(
+  paymentLinkId: string,
+  payment: BudgetPayment,
+  request: RequestDoc
+): Promise<PagarmeOrder | null> {
   try {
     const response = await pagarmeRequest<PagarmeOrderListResponse>(
       "GET",
-      `/orders?payment_link_id=${encodeURIComponent(paymentLinkId)}&status=paid&size=5`
+      `/orders?payment_link_id=${encodeURIComponent(paymentLinkId)}&status=paid&size=10`
     );
-    const paid = (response.data || []).find(isOrderPaid);
+    const paid = (response.data || []).find((order) =>
+      isPaidOrderMatchingRequest(order, payment, request)
+    );
     if (paid) return paid;
   } catch (err) {
     console.warn("[pagarme] Listagem de pedidos por payment_link_id falhou:", paymentLinkId, err);
@@ -612,6 +662,16 @@ export async function handlePagarmeWebhook(payload: PagarmeWebhookPayload): Prom
     return;
   }
 
+  const payment = req.budgetPayment;
+  if (payment && !isPaidOrderMatchingRequest(order, payment, req)) {
+    console.warn(
+      "[pagarme-webhook] Pedido pago ignorado — valor ou metadata não correspondem à O.S.",
+      order.id,
+      req.id
+    );
+    return;
+  }
+
   await markRequestPaid(docId, req);
 }
 
@@ -624,7 +684,8 @@ function mapChargeStatus(charge?: PagarmeCharge): BudgetPayment["status"] {
 }
 
 async function resolveRemotePaymentStatus(
-  payment: BudgetPayment
+  payment: BudgetPayment,
+  request: RequestDoc
 ): Promise<{ status: BudgetPayment["status"]; orderId?: string }> {
   let status: BudgetPayment["status"] = "pending";
   let orderId = payment.pagarmeOrderId;
@@ -632,7 +693,9 @@ async function resolveRemotePaymentStatus(
   if (payment.pagarmeOrderId) {
     const order = await pagarmeRequest<PagarmeOrder>("GET", `/orders/${payment.pagarmeOrderId}`);
     const chargeStatus = mapChargeStatus(order.charges?.[0]);
-    if (order.status === "paid" || chargeStatus === "paid") {
+    const orderPaid =
+      order.status === "paid" || chargeStatus === "paid" || isOrderPaid(order);
+    if (orderPaid && isPaidOrderMatchingRequest(order, payment, request)) {
       return { status: "paid", orderId: payment.pagarmeOrderId };
     }
     if (chargeStatus === "failed") status = "failed";
@@ -645,16 +708,13 @@ async function resolveRemotePaymentStatus(
       `/paymentlinks/${payment.pagarmePaymentLinkId}`
     );
 
-    const paidOrder =
-      (link.order && isOrderPaid(link.order) ? link.order : null) ||
-      (await findPaidOrderForPaymentLink(payment.pagarmePaymentLinkId));
+    const paidOrderFromLink =
+      link.order && isPaidOrderMatchingRequest(link.order, payment, request)
+        ? link.order
+        : await findPaidOrderForPaymentLink(payment.pagarmePaymentLinkId, payment, request);
 
-    if (paidOrder) {
-      return { status: "paid", orderId: paidOrder.id || orderId };
-    }
-
-    if ((link.total_paid_sessions ?? 0) > 0) {
-      return { status: "paid", orderId };
+    if (paidOrderFromLink) {
+      return { status: "paid", orderId: paidOrderFromLink.id || orderId };
     }
 
     if (link.status === "expired" && status === "pending" && !payment.pixQrCode) {
@@ -681,12 +741,11 @@ export async function checkPaymentStatus(requestId: string): Promise<{
     return { status: "paid", request: req, paid: true };
   }
 
-  if (payment.status === "paid") {
-    const updated = await markRequestPaid(docId, req);
-    return { status: "paid", request: updated, paid: true };
+  if (payment.status === "paid" && req.columnId === "manutencao") {
+    return { status: "paid", request: req, paid: true };
   }
 
-  const { status: remoteStatus, orderId } = await resolveRemotePaymentStatus(payment);
+  const { status: remoteStatus, orderId } = await resolveRemotePaymentStatus(payment, req);
   if (orderId && orderId !== payment.pagarmeOrderId) {
     payment.pagarmeOrderId = orderId;
   }

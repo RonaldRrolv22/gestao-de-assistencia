@@ -88,11 +88,6 @@ export default function BudgetPaymentSection({
         ? await verifyPaymentStatusByToken(publicToken)
         : await verifyPaymentStatus(request.id);
       if (result.paid) {
-        setPayment((p) => {
-          const next = p ? { ...p, status: "paid" as const } : p;
-          if (next) onPaymentChange?.(next);
-          return next;
-        });
         setMessage("Pagamento confirmado! A O.S. será movida para Em Manutenção.");
         onPaid?.();
       } else {
@@ -224,7 +219,7 @@ export default function BudgetPaymentSection({
     setMessage("Copiado!");
   };
 
-  if (payment?.status === "paid" || request.columnId === "manutencao") {
+  if (request.columnId === "manutencao") {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 text-xs flex items-center gap-2">
         <CheckCircle2 className="h-5 w-5 shrink-0" />
