@@ -963,9 +963,29 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
     parseInt(process.env.CATALOG_SYNC_INTERVAL_MS || "1800000", 10) || 1_800_000
   );
 
+  const runPaymentPoll = async (label: string) => {
+    try {
+      const result = await pollPendingPayments();
+      if (result.checked > 0) {
+        console.log(
+          `[payment-poll:${label}] ${result.checked} O.S. verificada(s), ${result.moved} movida(s) para manutenção`
+        );
+      }
+    } catch (err) {
+      console.error(`[payment-poll:${label}]`, err);
+    }
+  };
+
+  const paymentPollIntervalMs = Math.max(
+    15_000,
+    parseInt(process.env.PAYMENT_POLL_INTERVAL_MS || "30000", 10) || 30_000
+  );
+
   if (!process.env.VERCEL) {
     void runBackgroundCatalogSync("startup");
     setInterval(() => void runBackgroundCatalogSync("interval"), catalogSyncIntervalMs);
+    void runPaymentPoll("startup");
+    setInterval(() => void runPaymentPoll("interval"), paymentPollIntervalMs);
   }
 
   return app;
