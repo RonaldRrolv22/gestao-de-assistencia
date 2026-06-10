@@ -46,7 +46,10 @@ export async function ensurePaymentMethodsForRequest(
   const payment = request.budgetPayment;
 
   if (!isCardPaymentLinkCurrent(payment, amountCents, shipping)) {
-    await createCardPaymentLink(request.id, { amountCents });
+    await createCardPaymentLink(request.id, {
+      amountCents,
+      forceRefresh: !!payment?.paymentLinkUrl,
+    });
     request = await loadRequest(request.id);
   }
 

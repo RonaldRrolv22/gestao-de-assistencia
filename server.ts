@@ -770,13 +770,15 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
 
   app.post("/api/pagarme/card-link", async (req, res) => {
     try {
-      const { requestId, token, amountCents } = req.body as {
+      const { requestId, token, amountCents, forceRefresh } = req.body as {
         requestId?: string;
         token?: string;
         amountCents?: number;
+        forceRefresh?: boolean;
       };
       const cardOptions = {
         amountCents: parseAmountCents(amountCents),
+        forceRefresh: !!forceRefresh,
       };
       const result = token
         ? await createCardPaymentLinkByToken(token, cardOptions)

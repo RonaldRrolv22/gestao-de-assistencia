@@ -30,9 +30,12 @@ interface PaymentPanelProps {
   syncingPix: boolean;
   pixAmountMismatch: boolean;
   pixAmountCents: number;
+  cardAmountMismatch: boolean;
+  cardLinkAmountCents: number;
   pixExpired: boolean;
   loadingPix: boolean;
   loadingCard: boolean;
+  syncingCard?: boolean;
   loadingVerify: boolean;
   loadingLink: boolean;
   publicUrl: string | null;
@@ -53,9 +56,12 @@ export default function PaymentPanel({
   syncingPix,
   pixAmountMismatch,
   pixAmountCents,
+  cardAmountMismatch,
+  cardLinkAmountCents,
   pixExpired,
   loadingPix,
   loadingCard,
+  syncingCard = false,
   onGeneratePix,
   onGenerateCard,
   onRefreshPix,
@@ -79,6 +85,10 @@ export default function PaymentPanel({
 
   const handleCardClick = () => {
     setSelectedMethod("card");
+    if (cardAmountMismatch) {
+      onGenerateCard();
+      return;
+    }
     if (!hasCard) {
       onGenerateCard();
     }
@@ -119,6 +129,14 @@ export default function PaymentPanel({
           </div>
         )}
 
+        {cardAmountMismatch && !loadingCard && !syncingCard && (
+          <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs">
+            Valor alterado (
+            {formatCurrency((cardLinkAmountCents || payment?.amountCents || 0) / 100)} → {formatCurrency(totalFinal)}
+            ). Clique em &quot;Pagar com cartão de crédito&quot; para gerar um novo link.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             type="button"
@@ -135,11 +153,11 @@ export default function PaymentPanel({
           </button>
           <button
             type="button"
-            disabled={loadingCard}
+            disabled={loadingCard || syncingCard}
             onClick={handleCardClick}
             className={selectedMethod === "card" ? BUDGET_METHOD_ACTIVE : BUDGET_METHOD_IDLE}
           >
-            {loadingCard ? (
+            {loadingCard || syncingCard ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <CreditCard className="h-5 w-5" />
@@ -182,7 +200,7 @@ export default function PaymentPanel({
           </div>
         )}
 
-        {selectedMethod === "card" && hasCard && payment?.paymentLinkUrl && (
+        {selectedMethod === "card" && hasCard && payment?.paymentLinkUrl && !cardAmountMismatch && (
           <div className="space-y-2 pt-1">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
               Link de pagamento

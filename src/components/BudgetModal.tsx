@@ -247,7 +247,7 @@ export default function BudgetModal({
 
       if (stillNeedsCard) {
         try {
-          const cardResult = await generateCardLink(request.id, liveAmountCents);
+          const cardResult = await generateCardLink(request.id, liveAmountCents, stillNeedsCard);
           workingSnapshot = mergeBudgetPaymentSnapshot(workingSnapshot, cardResult, liveAmountCents, shipping);
           setPaymentSnapshot(workingSnapshot);
         } catch (err) {

@@ -56,12 +56,13 @@ export async function generatePixPaymentByToken(
 
 export async function generateCardLink(
   requestId: string,
-  amountCents?: number
+  amountCents?: number,
+  forceRefresh = false
 ): Promise<BudgetPayment> {
   const response = await fetch("/api/pagarme/card-link", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ requestId, amountCents }),
+    body: JSON.stringify({ requestId, amountCents, forceRefresh }),
   });
   if (!response.ok) throw new Error(await parseError(response));
   return response.json();
@@ -69,12 +70,13 @@ export async function generateCardLink(
 
 export async function generateCardLinkByToken(
   token: string,
-  amountCents?: number
+  amountCents?: number,
+  forceRefresh = false
 ): Promise<BudgetPayment> {
   const response = await fetch("/api/pagarme/card-link", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, amountCents }),
+    body: JSON.stringify({ token, amountCents, forceRefresh }),
   });
   if (!response.ok) throw new Error(await parseError(response));
   return response.json();

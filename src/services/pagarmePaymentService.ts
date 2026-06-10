@@ -335,10 +335,12 @@ export async function createCardPaymentLink(
   const amountCents = resolveAmountCents(req, options?.amountCents);
   const shipping = req.budget?.shipping ?? 0;
   const existing = req.budgetPayment;
+  const existingCardCents = existing?.cardLinkAmountCents;
 
   if (
     !options?.forceRefresh &&
     existing &&
+    existingCardCents === amountCents &&
     isCardPaymentLinkCurrent(existing, amountCents, shipping)
   ) {
     return { ...existing, requestId: req.id };
@@ -869,7 +871,7 @@ export async function createPixPaymentByToken(
 
 export async function createCardPaymentLinkByToken(
   token: string,
-  options?: { amountCents?: number }
+  options?: { amountCents?: number; forceRefresh?: boolean }
 ) {
   const { data: req } = await loadRequestByPublicToken(token);
   return createCardPaymentLink(req.id, options);

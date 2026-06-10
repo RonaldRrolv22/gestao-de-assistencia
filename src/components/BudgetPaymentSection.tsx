@@ -151,6 +151,7 @@ export default function BudgetPaymentSection({
   );
 
   const pixAmountCents = payment?.pixAmountCents ?? payment?.amountCents ?? 0;
+  const cardLinkAmountCents = payment?.cardLinkAmountCents ?? 0;
   const liveAmountCents = Math.round(totalFinal * 100);
   const pixAmountMismatch =
     !compact &&
@@ -164,24 +165,31 @@ export default function BudgetPaymentSection({
     !request.budget?.isWarranty &&
     payment?.status !== "paid" &&
     !!payment?.paymentLinkUrl &&
-    shipping > 0 &&
     liveAmountCents > 0 &&
     !isCardPaymentLinkCurrent(payment, liveAmountCents, shipping);
 
-  const handleCard = async () => {
+  const handleCard = async (refresh = false) => {
     const amountCents = Math.round(totalFinalRef.current * 100);
     if (amountCents <= 0) {
       setError("Informe um valor maior que zero (peças, serviços ou frete) antes de gerar o pagamento.");
       return;
     }
+    const forceRefresh = refresh || cardAmountMismatch;
     setLoadingCard(true);
     setError(null);
+    if (forceRefresh) {
+      setMessage("Atualizando link de cartão para o novo valor...");
+    }
     try {
       const result = publicToken
-        ? await generateCardLinkByToken(publicToken, amountCents)
-        : await generateCardLink(request.id, amountCents);
+        ? await generateCardLinkByToken(publicToken, amountCents, forceRefresh)
+        : await generateCardLink(request.id, amountCents, forceRefresh);
       notifyPayment(result);
-      setMessage("Link de cartão gerado (parcelamento em até 10x, conforme valor mínimo por parcela).");
+      setMessage(
+        forceRefresh
+          ? "Link de cartão atualizado para o valor do orçamento."
+          : "Link de cartão gerado (parcelamento em até 10x, conforme valor mínimo por parcela)."
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao gerar link de cartão.");
     } finally {
@@ -243,14 +251,17 @@ export default function BudgetPaymentSection({
       syncingPix={syncingPix || loadingPix}
       pixAmountMismatch={pixAmountMismatch}
       pixAmountCents={pixAmountCents}
+      cardAmountMismatch={cardAmountMismatch}
+      cardLinkAmountCents={cardLinkAmountCents}
       pixExpired={pixExpired}
       loadingPix={loadingPix}
       loadingCard={combinedLoadingCard}
+      syncingCard={externalLoadingCard}
       loadingVerify={loadingVerify}
       loadingLink={loadingLink}
       publicUrl={publicUrl}
       onGeneratePix={() => handlePix(false)}
-      onGenerateCard={handleCard}
+      onGenerateCard={() => handleCard(false)}
       onPublicLink={handlePublicLink}
       onVerify={handleVerify}
       onRefreshPix={() => handlePix(true)}
