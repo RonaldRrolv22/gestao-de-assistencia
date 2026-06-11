@@ -247,6 +247,8 @@ export default function KanbanBoard({
       return;
     }
 
+    const receivedDate = equipmentForm.equipmentReceivedDate.trim();
+
     onAddRequest({
       columnId: "solicitacao",
       clientId: selectedExistingClientId === "add_new_client" ? `cli-temp-${Date.now()}` : selectedExistingClientId,
@@ -263,7 +265,7 @@ export default function KanbanBoard({
       serialNumber: equipmentForm.serialNumber.trim(),
       invoiceDate: equipmentForm.invoiceDate,
       openingDate: new Date().toISOString().split("T")[0],
-      equipmentReceivedDate: equipmentForm.equipmentReceivedDate.trim() || undefined,
+      ...(receivedDate ? { equipmentReceivedDate: receivedDate } : {}),
       problemDescription: requestDescForm.problemDescription.trim(),
       initialDiagnostic: requestDescForm.initialDiagnostic.trim()
     });

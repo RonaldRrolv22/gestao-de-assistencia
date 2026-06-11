@@ -169,7 +169,7 @@ export async function createMaintenanceRequest(
   };
 
   await setDoc(doc(db, COLLECTIONS.requests, docId), {
-    ...request,
+    ...stripUndefinedDeep(request),
     updatedAt: serverTimestamp(),
   });
 
