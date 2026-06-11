@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useRef } from "react";
 import { Calendar, Cpu, Package, Loader2, Download, PackageCheck } from "lucide-react";
 import { MaintenanceRequest } from "../../types";
 import { formatDate } from "../../utils";
@@ -44,12 +44,21 @@ export default function ServiceOrderCard({
   const hasShippingLabel = Boolean(req.shippingLabel?.trackingCode);
   const showShippingAction = isLiberado && (onGenerateShippingLabel || onDownloadShippingLabel);
   const hasReceivedDate = Boolean(req.equipmentReceivedDate?.trim());
-  const [editingDate, setEditingDate] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
+  const openDatePicker = () => {
+    const input = dateInputRef.current;
+    if (!input) return;
+    try {
+      input.showPicker?.();
+    } catch {
+      input.click();
+    }
+  };
 
   const handleDateChange = (value: string) => {
     if (!value || !onSaveReceivedDate) return;
     onSaveReceivedDate(req.id, value);
-    setEditingDate(false);
   };
 
   return (
@@ -93,41 +102,34 @@ export default function ServiceOrderCard({
           </p>
 
           <div
-            className={`mt-1.5 flex items-center gap-1.5 text-[10px] rounded-md px-2 py-1 border ${
-              hasReceivedDate
-                ? "text-slate-700 bg-slate-50/90 border-slate-200/70"
-                : "text-amber-800/90 bg-amber-50/60 border-amber-200/50 border-dashed"
-            }`}
+            className="mt-1.5 flex items-center gap-1.5 text-[10px] rounded-md px-2 py-1.5 border text-slate-700 bg-white border-slate-200/80 shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
-            <PackageCheck
-              className={`h-3 w-3 shrink-0 ${hasReceivedDate ? "text-brand-orange" : "text-amber-600/70"}`}
+            <PackageCheck className="h-3 w-3 shrink-0 text-brand-orange" />
+            <button
+              type="button"
+              className="text-left flex-1 min-w-0 truncate text-slate-700"
+              title={
+                hasReceivedDate
+                  ? "Clique para alterar a data de recebimento"
+                  : "Clique para informar quando o equipamento chegou (opcional)"
+              }
+              onClick={openDatePicker}
+            >
+              <span className="underline decoration-slate-400/90 underline-offset-2">Recebido em</span>{" "}
+              <strong className={hasReceivedDate ? "text-slate-900" : "text-slate-400 font-medium"}>
+                {hasReceivedDate ? formatDate(req.equipmentReceivedDate!) : "—"}
+              </strong>
+            </button>
+            <input
+              ref={dateInputRef}
+              type="date"
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden
+              value={req.equipmentReceivedDate || ""}
+              onChange={(e) => handleDateChange(e.target.value)}
             />
-            {hasReceivedDate && !editingDate ? (
-              <button
-                type="button"
-                className="text-left flex-1 min-w-0 truncate hover:underline"
-                title="Clique para alterar a data de recebimento"
-                onClick={() => setEditingDate(true)}
-              >
-                Recebido em <strong>{formatDate(req.equipmentReceivedDate!)}</strong>
-              </button>
-            ) : (
-              <div className="flex flex-1 items-center gap-1.5 min-w-0">
-                {!editingDate && (
-                  <span className="italic text-amber-700/80 shrink-0">Aguardando recebimento</span>
-                )}
-                <input
-                  type="date"
-                  value={req.equipmentReceivedDate || ""}
-                  onChange={(e) => handleDateChange(e.target.value)}
-                  onFocus={() => setEditingDate(true)}
-                  onBlur={() => setEditingDate(false)}
-                  className="flex-1 min-w-0 text-[10px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white"
-                  title="Informe quando o equipamento foi recebido"
-                />
-              </div>
-            )}
           </div>
         </div>
 

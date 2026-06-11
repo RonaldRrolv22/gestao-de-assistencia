@@ -596,7 +596,7 @@ export default function KanbanBoard({
               </button>
             </div>
 
-            <form onSubmit={handleSaveRequest} className="flex flex-col flex-1 min-h-0 text-slate-700">
+            <form onSubmit={handleSaveRequest} noValidate className="flex flex-col flex-1 min-h-0 text-slate-700">
               <div className="flex-1 overflow-y-auto overscroll-contain px-5 sm:px-6 py-5 sm:py-6 space-y-5 bg-slate-50/70">
 
               {/* Step 1: Client selection drop */}
@@ -798,7 +798,7 @@ export default function KanbanBoard({
                     />
                   </div>
                   <div>
-                    <label className={ADD_MODAL_LABEL}>Data de recebimento na empresa</label>
+                    <label className={ADD_MODAL_LABEL}>Data de recebimento na empresa (opcional)</label>
                     <input
                       type="date"
                       value={equipmentForm.equipmentReceivedDate}
@@ -806,10 +806,9 @@ export default function KanbanBoard({
                         setEquipmentForm({ ...equipmentForm, equipmentReceivedDate: e.target.value })
                       }
                       className={`${ADD_MODAL_INPUT} font-mono`}
-                      placeholder="Opcional — pode preencher depois no card"
                     />
                     <p className="text-[10px] text-slate-500 mt-1">
-                      Deixe em branco se ainda não recebeu; informe depois direto no card.
+                      Pode ficar em branco e ser preenchida depois no card, quando o produto chegar.
                     </p>
                   </div>
                 </div>
@@ -962,8 +961,8 @@ export default function KanbanBoard({
                       </button>
                     </div>
                     {!editedEquipmentReceivedDate && (
-                      <p className="text-[10px] text-amber-700 mt-1 italic">
-                        Aguardando informação de quando o equipamento foi recebido.
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Opcional — informe quando o equipamento chegar (no card ou aqui).
                       </p>
                     )}
                   </div>
