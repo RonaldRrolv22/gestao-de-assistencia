@@ -17,6 +17,7 @@ interface KanbanColumnProps {
   onDrop: (e: React.DragEvent) => void;
   onAddRequest?: () => void;
   onCardClick: (req: MaintenanceRequest) => void;
+  onSaveReceivedDate?: (requestId: string, date: string) => void;
   onDragStart: (e: React.DragEvent, reqId: string) => void;
   onDeleteCard?: (req: MaintenanceRequest) => void;
   onRejectBudget?: (req: MaintenanceRequest) => void;
@@ -33,6 +34,7 @@ export default function KanbanColumn({
   onDrop,
   onAddRequest,
   onCardClick,
+  onSaveReceivedDate,
   onDragStart,
   onDeleteCard,
   onRejectBudget,
@@ -103,6 +105,7 @@ export default function KanbanColumn({
                   key={req.id}
                   request={req}
                   onClick={() => onCardClick(req)}
+                  onSaveReceivedDate={onSaveReceivedDate}
                   onDragStart={(e) => onDragStart(e, req.id)}
                   onDelete={isOrcamentoColumn && onDeleteCard ? () => onDeleteCard(req) : undefined}
                   onRejectBudget={

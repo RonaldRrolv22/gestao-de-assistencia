@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { AlertCircle, Copy, CreditCard, QrCode, Loader2 } from "lucide-react";
 import { BudgetPayment } from "../../types";
 import { formatCurrency } from "../../utils";
@@ -73,8 +73,13 @@ export default function PaymentPanel({
 }: PaymentPanelProps) {
   const status = STATUS_MAP[payment?.status || "none"];
   const hasPix = !!payment?.pixQrCode && !pixExpired;
-  const hasCard = !!payment?.paymentLinkUrl;
+  const hasCard = !!payment?.paymentLinkUrl?.trim();
   const [selectedMethod, setSelectedMethod] = useState<"pix" | "card">("pix");
+
+  useEffect(() => {
+    if (hasCard && !hasPix) setSelectedMethod("card");
+    else if (hasPix && !hasCard) setSelectedMethod("pix");
+  }, [hasCard, hasPix]);
 
   const handlePixClick = () => {
     setSelectedMethod("pix");
@@ -97,6 +102,9 @@ export default function PaymentPanel({
       onGenerateCard();
     }
   };
+
+  const showPixDetails = selectedMethod === "pix" && hasPix && !pixAmountMismatch;
+  const showCardDetails = selectedMethod === "card" && hasCard;
 
   return (
     <SummaryCard
@@ -180,8 +188,8 @@ export default function PaymentPanel({
           )}
         </div>
 
-        {selectedMethod === "pix" && hasPix && !pixAmountMismatch && (
-          <div className="space-y-3 pt-1">
+        {showPixDetails && (
+          <div className="space-y-3 pt-1 border-t border-slate-100">
             {payment?.pixQrCodeUrl && (
               <div className="flex justify-center">
                 <img
@@ -214,20 +222,20 @@ export default function PaymentPanel({
           </div>
         )}
 
-        {selectedMethod === "card" && hasCard && payment?.paymentLinkUrl && !cardAmountMismatch && (
-          <div className="space-y-2 pt-1">
+        {showCardDetails && (
+          <div className="space-y-2 pt-1 border-t border-slate-100">
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
               Link de pagamento
             </label>
             <div className="flex gap-2">
               <input
                 readOnly
-                value={payment.paymentLinkUrl}
+                value={payment?.paymentLinkUrl || ""}
                 className="flex-1 text-xs font-mono border border-slate-200 rounded-xl p-3 bg-slate-50"
               />
               <button
                 type="button"
-                onClick={() => onCopy(payment.paymentLinkUrl || "")}
+                onClick={() => onCopy(payment?.paymentLinkUrl || "")}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 shrink-0"
               >
                 <Copy className="h-4 w-4" />
@@ -235,6 +243,12 @@ export default function PaymentPanel({
               </button>
             </div>
           </div>
+        )}
+
+        {selectedMethod === "card" && !hasCard && !loadingCard && !syncingCard && (
+          <p className="text-[11px] text-slate-500 text-center py-2">
+            Clique novamente em &quot;Pagar com cartão&quot; para gerar o link.
+          </p>
         )}
       </div>
     </SummaryCard>

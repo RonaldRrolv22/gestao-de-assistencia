@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { Calendar, Cpu, Package, Loader2, Download, PackageCheck } from "lucide-react";
 import { MaintenanceRequest } from "../../types";
 import { formatDate } from "../../utils";
@@ -16,6 +16,7 @@ interface ServiceOrderCardProps {
   request: MaintenanceRequest;
   onClick: () => void;
   onDragStart: (e: React.DragEvent) => void;
+  onSaveReceivedDate?: (requestId: string, date: string) => void;
   onDelete?: () => void;
   onRejectBudget?: () => void;
   onGenerateShippingLabel?: () => void;
@@ -28,6 +29,7 @@ export default function ServiceOrderCard({
   request: req,
   onClick,
   onDragStart,
+  onSaveReceivedDate,
   onDelete,
   onRejectBudget,
   onGenerateShippingLabel,
@@ -35,13 +37,20 @@ export default function ServiceOrderCard({
   isGeneratingShippingLabel = false,
   isDownloadingShippingLabel = false,
 }: ServiceOrderCardProps) {
-  const isSolicitacao = req.columnId === "solicitacao";
   const isOrcamento = req.columnId === "orcamento" || req.columnId === "recusado";
   const isLiberado = req.columnId === "liberado";
   const rejected = isBudgetRejected(req);
   const showActions = isOrcamento && (onDelete || onRejectBudget);
   const hasShippingLabel = Boolean(req.shippingLabel?.trackingCode);
   const showShippingAction = isLiberado && (onGenerateShippingLabel || onDownloadShippingLabel);
+  const hasReceivedDate = Boolean(req.equipmentReceivedDate?.trim());
+  const [editingDate, setEditingDate] = useState(false);
+
+  const handleDateChange = (value: string) => {
+    if (!value || !onSaveReceivedDate) return;
+    onSaveReceivedDate(req.id, value);
+    setEditingDate(false);
+  };
 
   return (
     <article
@@ -54,7 +63,6 @@ export default function ServiceOrderCard({
       }`}
     >
       <div className="px-3.5 pt-3.5 pb-3">
-        {/* Bloco 1 — Cabeçalho */}
         <div className="mb-2.5">
           <div className="flex items-center justify-between gap-2 mb-1">
             <span className="font-mono text-[10px] font-semibold text-heading tracking-tight">
@@ -70,7 +78,6 @@ export default function ServiceOrderCard({
           </h4>
         </div>
 
-        {/* Bloco 2 — Informações secundárias */}
         <div className="space-y-0.5 mb-2.5">
           {req.clientCompany && (
             <p className="text-[10px] text-text-secondary/75 truncate">{req.clientCompany}</p>
@@ -84,21 +91,46 @@ export default function ServiceOrderCard({
           <p className="text-[10px] font-mono text-text-secondary/55 pl-[18px]">
             S/N {req.serialNumber || "—"}
           </p>
-          {req.equipmentReceivedDate && (
-            <p
-              className={`text-[10px] flex items-center gap-1.5 mt-1 ${
-                isSolicitacao
-                  ? "text-brand-orange font-semibold bg-orange-50/80 border border-orange-200/60 rounded-md px-2 py-1"
-                  : "text-text-secondary/70"
-              }`}
-            >
-              <PackageCheck className={`h-3 w-3 shrink-0 ${isSolicitacao ? "text-brand-orange" : "opacity-50"}`} />
-              Recebido em {formatDate(req.equipmentReceivedDate)}
-            </p>
-          )}
+
+          <div
+            className={`mt-1.5 flex items-center gap-1.5 text-[10px] rounded-md px-2 py-1 border ${
+              hasReceivedDate
+                ? "text-slate-700 bg-slate-50/90 border-slate-200/70"
+                : "text-amber-800/90 bg-amber-50/60 border-amber-200/50 border-dashed"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PackageCheck
+              className={`h-3 w-3 shrink-0 ${hasReceivedDate ? "text-brand-orange" : "text-amber-600/70"}`}
+            />
+            {hasReceivedDate && !editingDate ? (
+              <button
+                type="button"
+                className="text-left flex-1 min-w-0 truncate hover:underline"
+                title="Clique para alterar a data de recebimento"
+                onClick={() => setEditingDate(true)}
+              >
+                Recebido em <strong>{formatDate(req.equipmentReceivedDate!)}</strong>
+              </button>
+            ) : (
+              <div className="flex flex-1 items-center gap-1.5 min-w-0">
+                {!editingDate && (
+                  <span className="italic text-amber-700/80 shrink-0">Aguardando recebimento</span>
+                )}
+                <input
+                  type="date"
+                  value={req.equipmentReceivedDate || ""}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  onFocus={() => setEditingDate(true)}
+                  onBlur={() => setEditingDate(false)}
+                  className="flex-1 min-w-0 text-[10px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white"
+                  title="Informe quando o equipamento foi recebido"
+                />
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Bloco 3 — Status operacional / SLA */}
         <CardOperationalSummary request={req} />
       </div>
 

@@ -63,6 +63,7 @@ export default function BudgetPaymentSection({
   const totalFinalRef = useRef(totalFinal);
   totalFinalRef.current = totalFinal;
   const cardSyncInFlightRef = useRef(false);
+  const verifyCooldownUntilRef = useRef(0);
 
   const notifyPayment = (next: BudgetPayment) => {
     setPayment(next);
@@ -84,13 +85,15 @@ export default function BudgetPaymentSection({
   }, [request.budgetPayment, paymentOverride, shipping, totalFinal]);
 
   const handleVerify = useCallback(async () => {
+    if (Date.now() < verifyCooldownUntilRef.current) return;
+
     setLoadingVerify(true);
     setError(null);
     try {
       const result = publicToken
         ? await verifyPaymentStatusByToken(publicToken)
         : await verifyPaymentStatus(request.id);
-      if (result.paid) {
+      if (result.paid && result.status === "paid") {
         setMessage("Pagamento confirmado! A O.S. será movida para Em Manutenção.");
         onPaid?.();
       } else {
@@ -115,7 +118,7 @@ export default function BudgetPaymentSection({
     if (payment?.status !== "pending") return;
     const interval = setInterval(() => {
       handleVerify();
-    }, 10000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [payment?.status, handleVerify]);
 
@@ -135,6 +138,7 @@ export default function BudgetPaymentSection({
           ? await generatePixPaymentByToken(publicToken, refresh, amountCents)
           : await generatePixPayment(request.id, refresh, amountCents);
         notifyPayment(result);
+        verifyCooldownUntilRef.current = Date.now() + 30_000;
         setPixExpired(false);
         setMessage(
           refresh
@@ -193,6 +197,7 @@ export default function BudgetPaymentSection({
         ? await generateCardLinkByToken(publicToken, amountCents, forceRefresh)
         : await generateCardLink(request.id, amountCents, forceRefresh);
       notifyPayment(result);
+      verifyCooldownUntilRef.current = Date.now() + 30_000;
       setMessage(
         forceRefresh
           ? "Link de cartão atualizado para o valor do orçamento."
@@ -231,7 +236,7 @@ export default function BudgetPaymentSection({
     setMessage("Copiado!");
   };
 
-  if (request.columnId === "manutencao") {
+  if (payment?.status === "paid" || request.budgetPayment?.status === "paid") {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900 text-xs flex items-center gap-2">
         <CheckCircle2 className="h-5 w-5 shrink-0" />

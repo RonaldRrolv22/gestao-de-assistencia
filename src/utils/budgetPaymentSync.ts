@@ -4,7 +4,7 @@
  */
 
 import { BudgetPayment } from "../types";
-import { expectedCardLinkAmountCents } from "./cardSurcharge";
+import { acceptableCardPaymentCents, expectedCardLinkAmountCents } from "./cardSurcharge";
 
 export function cardLinkAmountCents(payment: BudgetPayment | undefined): number | undefined {
   if (!payment) return undefined;
@@ -31,7 +31,10 @@ export function isCardLinkSynced(payment: BudgetPayment | undefined, pixBaseCent
   }
   const expectedCardCents = expectedCardLinkAmountCents(pixBaseCents);
   const linkedCents = cardLinkAmountCents(payment);
-  if (linkedCents === undefined || linkedCents !== expectedCardCents) return false;
+  if (linkedCents === undefined) return false;
+  if (linkedCents !== expectedCardCents && !acceptableCardPaymentCents(pixBaseCents).includes(linkedCents)) {
+    return false;
+  }
   if (!url.includes("pagar.me")) return false;
   if (url.includes("localhost") || url.includes("/pagamento/")) return false;
   return true;

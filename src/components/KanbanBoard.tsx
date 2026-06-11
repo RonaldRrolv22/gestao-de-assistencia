@@ -148,7 +148,7 @@ export default function KanbanBoard({
     productName: "",
     serialNumber: "",
     invoiceDate: "",
-    equipmentReceivedDate: new Date().toISOString().split("T")[0],
+    equipmentReceivedDate: "",
   });
 
   // Description / problema sub-form states
@@ -240,7 +240,6 @@ export default function KanbanBoard({
     if (
       !equipmentForm.productName.trim() ||
       !equipmentForm.serialNumber.trim() ||
-      !equipmentForm.equipmentReceivedDate ||
       !requestDescForm.problemDescription.trim()
     ) {
       setShowErrors(true);
@@ -264,7 +263,7 @@ export default function KanbanBoard({
       serialNumber: equipmentForm.serialNumber.trim(),
       invoiceDate: equipmentForm.invoiceDate,
       openingDate: new Date().toISOString().split("T")[0],
-      equipmentReceivedDate: equipmentForm.equipmentReceivedDate || undefined,
+      equipmentReceivedDate: equipmentForm.equipmentReceivedDate.trim() || undefined,
       problemDescription: requestDescForm.problemDescription.trim(),
       initialDiagnostic: requestDescForm.initialDiagnostic.trim()
     });
@@ -277,7 +276,7 @@ export default function KanbanBoard({
       productName: "",
       serialNumber: "",
       invoiceDate: "",
-      equipmentReceivedDate: new Date().toISOString().split("T")[0],
+      equipmentReceivedDate: "",
     });
     setRequestDescForm({ problemDescription: "", initialDiagnostic: "" });
   };
@@ -406,6 +405,26 @@ export default function KanbanBoard({
   });
 
   // Helper inside card clicks
+  const handleSaveReceivedDate = async (requestId: string, date: string) => {
+    const card = requests.find((r) => r.id === requestId);
+    if (!card || !date.trim()) return;
+
+    const updated: MaintenanceRequest = {
+      ...card,
+      equipmentReceivedDate: date.trim(),
+    };
+
+    try {
+      await onUpdateRequest(updated);
+      if (editingRequest?.id === requestId) {
+        handleSetEditingRequest(updated);
+      }
+      appNoticeSuccess("Data de recebimento salva.");
+    } catch (err) {
+      appNoticeWarning(err instanceof Error ? err.message : "Falha ao salvar data de recebimento.");
+    }
+  };
+
   const handleCardClick = (req: MaintenanceRequest) => {
     setEditedInitialDiagnostic(req.initialDiagnostic || "");
     if (req.columnId === "solicitacao") {
@@ -489,6 +508,7 @@ export default function KanbanBoard({
                   : undefined
               }
               onCardClick={handleCardClick}
+              onSaveReceivedDate={handleSaveReceivedDate}
               onDragStart={handleDragStart}
               onDeleteCard={setRequestToDelete}
               onRejectBudget={
@@ -778,16 +798,19 @@ export default function KanbanBoard({
                     />
                   </div>
                   <div>
-                    <label className={ADD_MODAL_LABEL}>Data de recebimento na empresa *</label>
+                    <label className={ADD_MODAL_LABEL}>Data de recebimento na empresa</label>
                     <input
                       type="date"
-                      required
                       value={equipmentForm.equipmentReceivedDate}
                       onChange={(e) =>
                         setEquipmentForm({ ...equipmentForm, equipmentReceivedDate: e.target.value })
                       }
-                      className={`${ADD_MODAL_INPUT} font-mono ${showErrors && !equipmentForm.equipmentReceivedDate ? "border-red-500 bg-red-50/30 ring-2 ring-red-500/10" : ""}`}
+                      className={`${ADD_MODAL_INPUT} font-mono`}
+                      placeholder="Opcional — pode preencher depois no card"
                     />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Deixe em branco se ainda não recebeu; informe depois direto no card.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -912,39 +935,36 @@ export default function KanbanBoard({
                     <span className="text-slate-400 block">Emissão da NF:</span>
                     <span>{editingRequest.invoiceDate ? formatDate(editingRequest.invoiceDate) : "Não informada"}</span>
                   </div>
-                  <div>
+                  <div className="col-span-3">
                     <span className="text-slate-400 block">Recebido na empresa:</span>
-                    {editingRequest.columnId === "solicitacao" ? (
-                      <div className="flex gap-2 items-center mt-1">
-                        <input
-                          type="date"
-                          value={editedEquipmentReceivedDate}
-                          onChange={(e) => setEditedEquipmentReceivedDate(e.target.value)}
-                          className="flex-1 text-text-primary p-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/15 text-xs font-mono bg-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!editingRequest) return;
-                            const updatedReq = {
-                              ...editingRequest,
-                              equipmentReceivedDate: editedEquipmentReceivedDate || undefined,
-                            };
-                            onUpdateRequest(updatedReq);
-                            handleSetEditingRequest(updatedReq);
-                            appNoticeSuccess("Data de recebimento atualizada.");
-                          }}
-                          className="px-3 py-2 bg-brand-gradient hover:opacity-90 text-white font-semibold rounded-xl shrink-0 transition-all text-xs shadow-sm"
-                        >
-                          Salvar
-                        </button>
-                      </div>
-                    ) : (
-                      <strong className="text-slate-800">
-                        {editingRequest.equipmentReceivedDate
-                          ? formatDate(editingRequest.equipmentReceivedDate)
-                          : "Não informada"}
-                      </strong>
+                    <div className="flex gap-2 items-center mt-1">
+                      <input
+                        type="date"
+                        value={editedEquipmentReceivedDate}
+                        onChange={(e) => setEditedEquipmentReceivedDate(e.target.value)}
+                        className="flex-1 text-text-primary p-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/15 text-xs font-mono bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!editingRequest) return;
+                          const updatedReq = {
+                            ...editingRequest,
+                            equipmentReceivedDate: editedEquipmentReceivedDate.trim() || undefined,
+                          };
+                          await onUpdateRequest(updatedReq);
+                          handleSetEditingRequest(updatedReq);
+                          appNoticeSuccess("Data de recebimento salva no banco de dados.");
+                        }}
+                        className="px-3 py-2 bg-brand-gradient hover:opacity-90 text-white font-semibold rounded-xl shrink-0 transition-all text-xs shadow-sm"
+                      >
+                        Salvar
+                      </button>
+                    </div>
+                    {!editedEquipmentReceivedDate && (
+                      <p className="text-[10px] text-amber-700 mt-1 italic">
+                        Aguardando informação de quando o equipamento foi recebido.
+                      </p>
                     )}
                   </div>
                 </div>

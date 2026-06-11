@@ -552,8 +552,10 @@ function isPaidOrderMatchingRequest(
   const expectedAmounts = expectedPaymentAmountsCents(payment);
   const budgetCents = Math.round(effectiveBudgetTotal(request.budget) * 100);
 
+  if (!metaRequestId && !metaDocId) return false;
+
   if (paidAmount == null) {
-    return Boolean(metaRequestId || metaDocId);
+    return true;
   }
 
   if (expectedAmounts.includes(paidAmount)) return true;
@@ -677,11 +679,10 @@ async function resolveRemotePaymentStatus(
   let status: BudgetPayment["status"] = "pending";
   let orderId = payment.pagarmeOrderId;
 
-  if (payment.pagarmeOrderId) {
+  if (payment.pagarmeOrderId && payment.pixQrCode) {
     const order = await pagarmeRequest<PagarmeOrder>("GET", `/orders/${payment.pagarmeOrderId}`);
     const chargeStatus = mapChargeStatus(order.charges?.[0]);
-    const orderPaid =
-      order.status === "paid" || chargeStatus === "paid" || isOrderPaid(order);
+    const orderPaid = isOrderPaid(order);
     if (orderPaid && isPaidOrderMatchingRequest(order, payment, request)) {
       return { status: "paid", orderId: payment.pagarmeOrderId };
     }
@@ -696,7 +697,7 @@ async function resolveRemotePaymentStatus(
     );
 
     const paidOrderFromLink =
-      link.order && isPaidOrderMatchingRequest(link.order, payment, request)
+      link.order && isOrderPaid(link.order) && isPaidOrderMatchingRequest(link.order, payment, request)
         ? link.order
         : await findPaidOrderForPaymentLink(payment.pagarmePaymentLinkId, payment, request);
 

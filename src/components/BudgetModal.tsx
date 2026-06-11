@@ -692,7 +692,9 @@ export default function BudgetModal({
               </div>
             </div>
 
-            {request.columnId === "orcamento" && (warrantyPixOnly || !isWarranty) && (
+            {(request.columnId === "orcamento" || paymentSnapshot?.status === "pending") &&
+              paymentSnapshot?.status !== "paid" &&
+              (warrantyPixOnly || !isWarranty) && (
               <BudgetPaymentSection
                 request={request}
                 totalFinal={calculatedTotal}
