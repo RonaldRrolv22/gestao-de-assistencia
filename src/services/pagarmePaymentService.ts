@@ -9,6 +9,12 @@ import { pagarmeRequest } from "../lib/pagarmeClient";
 import { BudgetPayment, Client, MaintenanceRequest } from "../types";
 import { sanitizeRequestDocId } from "./requestIds";
 import {
+  acceptableCardPaymentCents,
+  buildCardInstallmentsWithSurcharge,
+  expectedCardLinkAmountCents,
+} from "../utils/cardSurcharge";
+import { chargeableBudgetTotal } from "../utils/maintenanceAccess";
+import {
   isCardLinkSynced,
   isCardPaymentLinkCurrent,
   isPixStillValid,
@@ -174,47 +180,30 @@ function buildCustomer(profile: PaymentCustomerProfile) {
   };
 }
 
-const MAX_CARD_INSTALLMENTS = 10;
-const MIN_CENTS_PER_INSTALLMENT = 500;
-
-function maxInstallmentsForAmount(amountCents: number): number {
-  for (let number = MAX_CARD_INSTALLMENTS; number >= 1; number--) {
-    if (number === 1 || Math.floor(amountCents / number) >= MIN_CENTS_PER_INSTALLMENT) {
-      return number;
-    }
-  }
-  return 1;
-}
-
-function buildCardInstallments(amountCents: number): { number: number; total: number }[] {
-  const max = maxInstallmentsForAmount(amountCents);
-  const installments: { number: number; total: number }[] = [];
-  for (let number = 1; number <= max; number++) {
-    installments.push({ number, total: amountCents });
-  }
-  return installments;
-}
-
 export function effectiveBudgetTotal(budget: MaintenanceRequest["budget"]): number {
-  if (!budget || budget.isWarranty) return 0;
-  if (typeof budget.totalFinal === "number" && Number.isFinite(budget.totalFinal)) {
-    return Math.max(0, budget.totalFinal);
-  }
-  const subtotalProducts = (budget.products || []).reduce((sum, p) => sum + (p.totalValue || 0), 0);
-  const subtotalServices = (budget.services || []).reduce((sum, s) => sum + (s.totalValue || 0), 0);
-  const subtotal = subtotalProducts + subtotalServices;
-  const shipping = budget.shipping || 0;
-  const discount = budget.discount || 0;
-  return Math.max(0, subtotal + shipping - discount);
+  return chargeableBudgetTotal(budget);
 }
 
-function amountCentsForRequest(req: RequestDoc): number {
-  if (!req.budget || req.budget.isWarranty) return 0;
-  const cents = Math.round(effectiveBudgetTotal(req.budget) * 100);
+function pixAmountCentsForRequest(req: RequestDoc): number {
+  const cents = Math.round(chargeableBudgetTotal(req.budget) * 100);
   if (cents <= 0) {
     throw new Error("Valor do orçamento deve ser maior que zero para cobrança.");
   }
   return cents;
+}
+
+function assertChargeableRequest(req: RequestDoc, forCard = false): void {
+  if (!req.budget) {
+    throw new Error("Orçamento não encontrado para cobrança.");
+  }
+  if (req.budget.isWarranty) {
+    if (!req.budget.chargeShippingOnWarranty || !(req.budget.shipping || 0)) {
+      throw new Error("Orçamentos em garantia sem cobrança de frete não exigem pagamento.");
+    }
+    if (forCard) {
+      throw new Error("Orçamentos em garantia cobram apenas frete via PIX.");
+    }
+  }
 }
 
 function resolveAmountCents(req: RequestDoc, overrideCents?: number): number {
@@ -224,7 +213,7 @@ function resolveAmountCents(req: RequestDoc, overrideCents?: number): number {
     }
     return overrideCents;
   }
-  return amountCentsForRequest(req);
+  return pixAmountCentsForRequest(req);
 }
 
 export async function loadRequestByDisplayId(requestId: string): Promise<{ docId: string; data: RequestDoc }> {
@@ -265,9 +254,7 @@ export async function createPixPayment(
   options?: { forceRefresh?: boolean; amountCents?: number }
 ): Promise<BudgetPayment & { requestId: string }> {
   const { docId, data: req } = await loadRequestByDisplayId(requestId);
-  if (req.budget?.isWarranty) {
-    throw new Error("Orçamentos em garantia não exigem pagamento.");
-  }
+  assertChargeableRequest(req);
 
   const amountCents = resolveAmountCents(req, options?.amountCents);
   const existing = req.budgetPayment;
@@ -329,22 +316,21 @@ export async function createCardPaymentLink(
   options?: { amountCents?: number; forceRefresh?: boolean }
 ): Promise<BudgetPayment & { requestId: string }> {
   const { docId, data: req } = await loadRequestByDisplayId(requestId);
-  if (req.budget?.isWarranty) {
-    throw new Error("Orçamentos em garantia não exigem pagamento.");
-  }
+  assertChargeableRequest(req, true);
 
-  const amountCents = resolveAmountCents(req, options?.amountCents);
+  const pixBaseCents = resolveAmountCents(req, options?.amountCents);
+  const cardLinkCents = expectedCardLinkAmountCents(pixBaseCents);
   const existing = req.budgetPayment;
 
   if (
     !options?.forceRefresh &&
     existing &&
-    isCardLinkSynced(existing, amountCents)
+    isCardLinkSynced(existing, pixBaseCents)
   ) {
     return { ...existing, requestId: req.id };
   }
 
-  const installments = buildCardInstallments(amountCents);
+  const installments = buildCardInstallmentsWithSurcharge(pixBaseCents);
   const customer = buildCustomer(await resolveCustomerProfile(req));
 
   const link = await pagarmeRequest<PagarmePaymentLink & {
@@ -368,7 +354,7 @@ export async function createCardPaymentLink(
       items: [
         {
           name: `Orçamento O.S. ${req.id}`,
-          amount: amountCents,
+          amount: cardLinkCents,
           default_quantity: 1,
         },
       ],
@@ -395,9 +381,9 @@ export async function createCardPaymentLink(
     method: "credit_card",
     pagarmePaymentLinkId: link.id,
     paymentLinkUrl: link.url,
-    amountCents,
-    cardLinkAmountCents: amountCents,
-    pixAmountCents: existingPayment?.pixAmountCents,
+    amountCents: pixBaseCents,
+    cardLinkAmountCents: cardLinkCents,
+    pixAmountCents: existingPayment?.pixAmountCents ?? pixBaseCents,
     pagarmeOrderId: existingPayment?.pagarmeOrderId,
     pagarmeChargeId: existingPayment?.pagarmeChargeId,
     pixQrCode: existingPayment?.pixQrCode,
@@ -572,6 +558,7 @@ function isPaidOrderMatchingRequest(
 
   if (expectedAmounts.includes(paidAmount)) return true;
   if (budgetCents > 0 && paidAmount === budgetCents) return true;
+  if (budgetCents > 0 && acceptableCardPaymentCents(budgetCents).includes(paidAmount)) return true;
 
   return false;
 }
@@ -737,11 +724,7 @@ export async function checkPaymentStatus(requestId: string): Promise<{
     return { status: "none", request: req, paid: false };
   }
 
-  if (req.columnId === "manutencao") {
-    return { status: "paid", request: req, paid: true };
-  }
-
-  if (payment.status === "paid" && req.columnId === "manutencao") {
+  if (payment.status === "paid") {
     return { status: "paid", request: req, paid: true };
   }
 
@@ -802,7 +785,7 @@ export async function pollPendingPayments(): Promise<{ checked: number; moved: n
 
   for (const doc of snap.docs) {
     const req = { ...(doc.data() as RequestDoc), id: (doc.data() as RequestDoc).id || doc.id };
-    if (req.budget?.isWarranty) continue;
+    if (req.budget?.isWarranty && !req.budget.chargeShippingOnWarranty) continue;
 
     const payment = req.budgetPayment;
     if (!payment || payment.status === "paid" || payment.status === "none") continue;
@@ -835,7 +818,7 @@ export async function createPublicPaymentToken(requestId: string): Promise<{ url
   const payment: BudgetPayment = {
     ...(req.budgetPayment || {
       status: "none",
-      amountCents: req.budget && !req.budget.isWarranty ? Math.round(effectiveBudgetTotal(req.budget) * 100) : 0,
+      amountCents: req.budget ? Math.round(effectiveBudgetTotal(req.budget) * 100) : 0,
     }),
     publicToken: token,
   };

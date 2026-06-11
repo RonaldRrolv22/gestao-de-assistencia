@@ -14,11 +14,19 @@ import {
 
 interface WarrantyCardProps {
   isWarranty: boolean;
+  chargeShippingOnWarranty: boolean;
   canEdit: boolean;
   onChange: (value: boolean) => void;
+  onChargeShippingChange: (value: boolean) => void;
 }
 
-export default function WarrantyCard({ isWarranty, canEdit, onChange }: WarrantyCardProps) {
+export default function WarrantyCard({
+  isWarranty,
+  chargeShippingOnWarranty,
+  canEdit,
+  onChange,
+  onChargeShippingChange,
+}: WarrantyCardProps) {
   return (
     <SummaryCard title="Garantia técnica" subtitle="Cobertura de peças e serviços">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -54,6 +62,37 @@ export default function WarrantyCard({ isWarranty, canEdit, onChange }: Warranty
           </button>
         </div>
       </div>
+
+      {isWarranty && (
+        <div className="mt-4 pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-slate-800 text-sm">Cobrar frete do cliente?</p>
+            <p className="text-slate-500 text-[11px] mt-1 leading-relaxed">
+              {chargeShippingOnWarranty
+                ? "Somente o frete será cobrado via PIX antes da manutenção."
+                : "Frete isento — aprovação direta em garantia."}
+            </p>
+          </div>
+          <div className={BUDGET_SEGMENTED_WRAP}>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => onChargeShippingChange(true)}
+              className={chargeShippingOnWarranty ? BUDGET_SEGMENTED_ACTIVE : BUDGET_SEGMENTED_IDLE}
+            >
+              Sim
+            </button>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => onChargeShippingChange(false)}
+              className={!chargeShippingOnWarranty ? BUDGET_SEGMENTED_ACTIVE : BUDGET_SEGMENTED_IDLE}
+            >
+              Não
+            </button>
+          </div>
+        </div>
+      )}
     </SummaryCard>
   );
 }

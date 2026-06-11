@@ -84,6 +84,9 @@ export default function BudgetModal({
   
   // Set up local state for budgeting editing
   const [isWarranty, setIsWarranty] = useState(request.budget?.isWarranty || false);
+  const [chargeShippingOnWarranty, setChargeShippingOnWarranty] = useState(
+    request.budget?.chargeShippingOnWarranty || false
+  );
   const [budgetProducts, setBudgetProducts] = useState<BudgetItemProduct[]>(request.budget?.products || []);
   const [budgetServices, setBudgetServices] = useState<BudgetItemService[]>(request.budget?.services || []);
   const [discount, setDiscount] = useState<number>(request.budget?.discount || 0);
@@ -185,20 +188,28 @@ export default function BudgetModal({
   const subtotalServices = budgetServices.reduce((sum, s) => sum + s.totalValue, 0);
   const calculatedSubtotal = subtotalProducts + subtotalServices;
   const finalDiscount = isWarranty ? (calculatedSubtotal + shipping) : discount;
-  const calculatedTotal = isWarranty ? 0 : Math.max(0, calculatedSubtotal + shipping - discount);
+  const calculatedTotal = isWarranty
+    ? chargeShippingOnWarranty
+      ? Math.max(0, shipping)
+      : 0
+    : Math.max(0, calculatedSubtotal + shipping - discount);
+  const warrantyPixOnly = isWarranty && chargeShippingOnWarranty;
+  const showWarrantyApprove = isWarranty && !chargeShippingOnWarranty;
   calculatedTotalRef.current = calculatedTotal;
 
   useEffect(() => {
-    if (isWarranty || request.columnId !== "orcamento") return;
-    if (shipping <= 0) return;
+    if (request.columnId !== "orcamento") return;
+    if (isWarranty && !chargeShippingOnWarranty) return;
+    if (!isWarranty && shipping <= 0) return;
+    if (isWarranty && chargeShippingOnWarranty && shipping <= 0) return;
     if (calculatedTotal <= 0) return;
-    if (budgetProducts.length === 0 && budgetServices.length === 0) return;
+    if (!isWarranty && budgetProducts.length === 0 && budgetServices.length === 0) return;
     if (paymentSnapshotRef.current?.status === "paid") return;
     if (paymentSyncInFlightRef.current) return;
 
     const amountCents = Math.round(calculatedTotal * 100);
     const current = paymentSnapshotRef.current;
-    const needsCard = needsCardSync(current, amountCents);
+    const needsCard = !warrantyPixOnly && needsCardSync(current, amountCents);
     const needsPix = needsPixSync(current, amountCents);
 
     if (!needsCard && !needsPix) {
@@ -211,7 +222,7 @@ export default function BudgetModal({
 
       const liveAmountCents = Math.round(calculatedTotalRef.current * 100);
       const latest = paymentSnapshotRef.current;
-      const stillNeedsCard = needsCardSync(latest, liveAmountCents);
+      const stillNeedsCard = !warrantyPixOnly && needsCardSync(latest, liveAmountCents);
       const stillNeedsPix = needsPixSync(latest, liveAmountCents);
 
       if (!stillNeedsCard && !stillNeedsPix) {
@@ -228,6 +239,7 @@ export default function BudgetModal({
       try {
         await onSaveBudget(request.id, {
           isWarranty,
+          chargeShippingOnWarranty: isWarranty ? chargeShippingOnWarranty : undefined,
           products: budgetProducts,
           services: budgetServices,
           discount: finalDiscount,
@@ -293,6 +305,8 @@ export default function BudgetModal({
     discount,
     calculatedTotal,
     isWarranty,
+    chargeShippingOnWarranty,
+    warrantyPixOnly,
     budgetProducts.length,
     budgetServices.length,
     request.id,
@@ -382,6 +396,7 @@ export default function BudgetModal({
   const handleSaveOnly = () => {
     const budgetData: Budget = {
       isWarranty,
+      chargeShippingOnWarranty: isWarranty ? chargeShippingOnWarranty : undefined,
       products: budgetProducts,
       services: budgetServices,
       discount: finalDiscount,
@@ -398,6 +413,7 @@ export default function BudgetModal({
   const handleApproveAction = async () => {
     const budgetData: Budget = {
       isWarranty,
+      chargeShippingOnWarranty: chargeShippingOnWarranty,
       products: budgetProducts,
       services: budgetServices,
       discount: finalDiscount,
@@ -612,7 +628,16 @@ export default function BudgetModal({
             
             <BudgetOsSummaryCard request={request} />
 
-            <WarrantyCard isWarranty={isWarranty} canEdit={canEdit} onChange={setIsWarranty} />
+            <WarrantyCard
+              isWarranty={isWarranty}
+              chargeShippingOnWarranty={chargeShippingOnWarranty}
+              canEdit={canEdit}
+              onChange={(value) => {
+                setIsWarranty(value);
+                if (!value) setChargeShippingOnWarranty(false);
+              }}
+              onChargeShippingChange={setChargeShippingOnWarranty}
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
@@ -667,7 +692,7 @@ export default function BudgetModal({
               </div>
             </div>
 
-            {!isWarranty && request.columnId === "orcamento" && (
+            {request.columnId === "orcamento" && (warrantyPixOnly || !isWarranty) && (
               <BudgetPaymentSection
                 request={request}
                 totalFinal={calculatedTotal}
@@ -675,6 +700,7 @@ export default function BudgetModal({
                 paymentOverride={paymentSnapshot}
                 externalLoadingCard={autoCardLoading}
                 externalAutoCardError={autoCardError}
+                pixOnly={warrantyPixOnly}
                 onPaymentChange={handlePaymentChange}
                 onPaid={() => {
                   onClose();
@@ -687,6 +713,7 @@ export default function BudgetModal({
           <StickyActionFooter
             canEdit={canEdit}
             isWarranty={isWarranty}
+            showApproveWarranty={showWarrantyApprove}
             clientEmail={request.clientEmail}
             sendingEmail={sendingEmail}
             emailStatus={<EmailStatusIcons request={request} types={["budget"]} />}

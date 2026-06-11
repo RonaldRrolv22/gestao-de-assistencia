@@ -147,7 +147,8 @@ export default function KanbanBoard({
   const [equipmentForm, setEquipmentForm] = useState({
     productName: "",
     serialNumber: "",
-    invoiceDate: ""
+    invoiceDate: "",
+    equipmentReceivedDate: new Date().toISOString().split("T")[0],
   });
 
   // Description / problema sub-form states
@@ -164,17 +165,22 @@ export default function KanbanBoard({
       setEditingRequest(initialEditingRequest);
       if (initialEditingRequest) {
         setEditedInitialDiagnostic(initialEditingRequest.initialDiagnostic || "");
+        setEditedEquipmentReceivedDate(initialEditingRequest.equipmentReceivedDate || "");
       }
     }
   }, [initialEditingRequest]);
 
   const handleSetEditingRequest = (req: MaintenanceRequest | null) => {
     setEditingRequest(req);
-    if (!req) {
+    if (req) {
+      setEditedInitialDiagnostic(req.initialDiagnostic || "");
+      setEditedEquipmentReceivedDate(req.equipmentReceivedDate || "");
+    } else {
       onCloseEditingRequest?.();
     }
   };
   const [editedInitialDiagnostic, setEditedInitialDiagnostic] = useState("");
+  const [editedEquipmentReceivedDate, setEditedEquipmentReceivedDate] = useState("");
   const [requestToDelete, setRequestToDelete] = useState<MaintenanceRequest | null>(null);
 
   // Drag and drop states
@@ -231,7 +237,12 @@ export default function KanbanBoard({
       }
     }
 
-    if (!equipmentForm.productName.trim() || !equipmentForm.serialNumber.trim() || !requestDescForm.problemDescription.trim()) {
+    if (
+      !equipmentForm.productName.trim() ||
+      !equipmentForm.serialNumber.trim() ||
+      !equipmentForm.equipmentReceivedDate ||
+      !requestDescForm.problemDescription.trim()
+    ) {
       setShowErrors(true);
       appNoticeWarning("Preencha todos os campos obrigatórios (*).");
       return;
@@ -253,6 +264,7 @@ export default function KanbanBoard({
       serialNumber: equipmentForm.serialNumber.trim(),
       invoiceDate: equipmentForm.invoiceDate,
       openingDate: new Date().toISOString().split("T")[0],
+      equipmentReceivedDate: equipmentForm.equipmentReceivedDate || undefined,
       problemDescription: requestDescForm.problemDescription.trim(),
       initialDiagnostic: requestDescForm.initialDiagnostic.trim()
     });
@@ -261,7 +273,12 @@ export default function KanbanBoard({
     setShowAddModal(false);
     setSelectedExistingClientId("");
     setClientForm({ name: "", company: "", address: "", city: "", state: "", phone: "", email: "", cpfCnpj: "", cep: "" });
-    setEquipmentForm({ productName: "", serialNumber: "", invoiceDate: "" });
+    setEquipmentForm({
+      productName: "",
+      serialNumber: "",
+      invoiceDate: "",
+      equipmentReceivedDate: new Date().toISOString().split("T")[0],
+    });
     setRequestDescForm({ problemDescription: "", initialDiagnostic: "" });
   };
 
@@ -280,15 +297,6 @@ export default function KanbanBoard({
 
     if (!canMoveKanbanCard(card.columnId, toCol, card)) {
       return;
-    }
-
-    if (toCol === "manutencao" && card.columnId === "orcamento") {
-      const isWarranty = card.budget?.isWarranty;
-      const isPaid = card.budgetPayment?.status === "paid";
-      if (!isWarranty && !isPaid) {
-        appNoticeWarning("Pagamento via Pagar.me necessário antes de iniciar a manutenção.");
-        return;
-      }
     }
 
     // Movement restriction check for non-admins if entering budget table editing
@@ -769,6 +777,18 @@ export default function KanbanBoard({
                       className={`${ADD_MODAL_INPUT} font-mono`}
                     />
                   </div>
+                  <div>
+                    <label className={ADD_MODAL_LABEL}>Data de recebimento na empresa *</label>
+                    <input
+                      type="date"
+                      required
+                      value={equipmentForm.equipmentReceivedDate}
+                      onChange={(e) =>
+                        setEquipmentForm({ ...equipmentForm, equipmentReceivedDate: e.target.value })
+                      }
+                      className={`${ADD_MODAL_INPUT} font-mono ${showErrors && !equipmentForm.equipmentReceivedDate ? "border-red-500 bg-red-50/30 ring-2 ring-red-500/10" : ""}`}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -891,6 +911,41 @@ export default function KanbanBoard({
                   <div>
                     <span className="text-slate-400 block">Emissão da NF:</span>
                     <span>{editingRequest.invoiceDate ? formatDate(editingRequest.invoiceDate) : "Não informada"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Recebido na empresa:</span>
+                    {editingRequest.columnId === "solicitacao" ? (
+                      <div className="flex gap-2 items-center mt-1">
+                        <input
+                          type="date"
+                          value={editedEquipmentReceivedDate}
+                          onChange={(e) => setEditedEquipmentReceivedDate(e.target.value)}
+                          className="flex-1 text-text-primary p-2 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/15 text-xs font-mono bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!editingRequest) return;
+                            const updatedReq = {
+                              ...editingRequest,
+                              equipmentReceivedDate: editedEquipmentReceivedDate || undefined,
+                            };
+                            onUpdateRequest(updatedReq);
+                            handleSetEditingRequest(updatedReq);
+                            appNoticeSuccess("Data de recebimento atualizada.");
+                          }}
+                          className="px-3 py-2 bg-brand-gradient hover:opacity-90 text-white font-semibold rounded-xl shrink-0 transition-all text-xs shadow-sm"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    ) : (
+                      <strong className="text-slate-800">
+                        {editingRequest.equipmentReceivedDate
+                          ? formatDate(editingRequest.equipmentReceivedDate)
+                          : "Não informada"}
+                      </strong>
+                    )}
                   </div>
                 </div>
               </div>

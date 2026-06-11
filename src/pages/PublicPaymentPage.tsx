@@ -57,7 +57,7 @@ export default function PublicPaymentPage({ token }: PublicPaymentPageProps) {
     );
   }
 
-  if (summary.isWarranty) {
+  if (summary.isWarranty && summary.totalFinal <= 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg p-6">
         <SummaryCard title="Garantia técnica">
@@ -109,6 +109,7 @@ export default function PublicPaymentPage({ token }: PublicPaymentPageProps) {
           totalFinal={summary.totalFinal}
           publicToken={token}
           compact
+          pixOnly={summary.isWarranty}
           onPaid={load}
         />
       </div>

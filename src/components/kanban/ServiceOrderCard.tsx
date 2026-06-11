@@ -4,7 +4,7 @@
  */
 
 import React from "react";
-import { Calendar, Cpu, Package, Loader2, Download } from "lucide-react";
+import { Calendar, Cpu, Package, Loader2, Download, PackageCheck } from "lucide-react";
 import { MaintenanceRequest } from "../../types";
 import { formatDate } from "../../utils";
 import { formatRequestDisplayId } from "../../services/requestIds";
@@ -35,6 +35,7 @@ export default function ServiceOrderCard({
   isGeneratingShippingLabel = false,
   isDownloadingShippingLabel = false,
 }: ServiceOrderCardProps) {
+  const isSolicitacao = req.columnId === "solicitacao";
   const isOrcamento = req.columnId === "orcamento" || req.columnId === "recusado";
   const isLiberado = req.columnId === "liberado";
   const rejected = isBudgetRejected(req);
@@ -83,6 +84,18 @@ export default function ServiceOrderCard({
           <p className="text-[10px] font-mono text-text-secondary/55 pl-[18px]">
             S/N {req.serialNumber || "—"}
           </p>
+          {req.equipmentReceivedDate && (
+            <p
+              className={`text-[10px] flex items-center gap-1.5 mt-1 ${
+                isSolicitacao
+                  ? "text-brand-orange font-semibold bg-orange-50/80 border border-orange-200/60 rounded-md px-2 py-1"
+                  : "text-text-secondary/70"
+              }`}
+            >
+              <PackageCheck className={`h-3 w-3 shrink-0 ${isSolicitacao ? "text-brand-orange" : "opacity-50"}`} />
+              Recebido em {formatDate(req.equipmentReceivedDate)}
+            </p>
+          )}
         </div>
 
         {/* Bloco 3 — Status operacional / SLA */}

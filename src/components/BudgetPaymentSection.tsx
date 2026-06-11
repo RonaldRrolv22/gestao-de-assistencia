@@ -16,6 +16,7 @@ import {
 } from "../services/pagarmeApi";
 import { CheckCircle2 } from "lucide-react";
 import PaymentPanel from "./payment/PaymentPanel";
+import { expectedCardLinkAmountCents } from "../utils/cardSurcharge";
 import { isCardLinkSynced, isPixStillValid, mergeBudgetPaymentSnapshot } from "../utils/budgetPaymentSync";
 
 interface BudgetPaymentSectionProps {
@@ -27,6 +28,8 @@ interface BudgetPaymentSectionProps {
   externalAutoCardError?: string | null;
   publicToken?: string;
   compact?: boolean;
+  /** Garantia com cobrança de frete: apenas PIX, sem link de cartão. */
+  pixOnly?: boolean;
   onPaid?: () => void;
   onPaymentChange?: (payment: BudgetPayment) => void;
 }
@@ -40,6 +43,7 @@ export default function BudgetPaymentSection({
   externalAutoCardError = null,
   publicToken,
   compact = false,
+  pixOnly = false,
   onPaid,
   onPaymentChange,
 }: BudgetPaymentSectionProps) {
@@ -152,15 +156,17 @@ export default function BudgetPaymentSection({
   const pixAmountCents = payment?.pixAmountCents ?? payment?.amountCents ?? 0;
   const cardLinkAmountCents = payment?.cardLinkAmountCents ?? 0;
   const liveAmountCents = Math.round(totalFinal * 100);
+  const expectedCardCents = expectedCardLinkAmountCents(liveAmountCents);
   const pixAmountMismatch =
     !compact &&
-    !request.budget?.isWarranty &&
+    (!request.budget?.isWarranty || pixOnly) &&
     payment?.status === "pending" &&
     !!payment?.pixQrCode &&
     liveAmountCents > 0 &&
     pixAmountCents !== liveAmountCents;
   const cardAmountMismatch =
     !compact &&
+    !pixOnly &&
     !request.budget?.isWarranty &&
     payment?.status !== "paid" &&
     !!payment?.paymentLinkUrl &&
@@ -243,6 +249,8 @@ export default function BudgetPaymentSection({
       shipping={shipping}
       payment={payment}
       compact={compact}
+      pixOnly={pixOnly}
+      expectedCardCents={expectedCardCents}
       publicToken={!!publicToken}
       error={displayError}
       message={message}

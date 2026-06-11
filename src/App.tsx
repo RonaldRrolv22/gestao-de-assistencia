@@ -259,9 +259,16 @@ function AppShell() {
 
     const budget = budgetOverride ?? req.budget;
 
-    if (budget && !budget.isWarranty) {
+    if (!budget?.isWarranty) {
       appNoticeWarning("Orçamentos particulares só avançam após pagamento confirmado via Pagar.me.");
       throw new Error("Orçamento particular exige pagamento confirmado.");
+    }
+
+    const chargesFreight =
+      budget.chargeShippingOnWarranty && (budget.shipping || 0) > 0;
+    if (chargesFreight && req.budgetPayment?.status !== "paid") {
+      appNoticeWarning("O frete deve ser pago via PIX antes de iniciar a manutenção.");
+      throw new Error("Frete em garantia exige pagamento confirmado.");
     }
 
     const log = {

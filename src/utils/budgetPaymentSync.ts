@@ -4,6 +4,7 @@
  */
 
 import { BudgetPayment } from "../types";
+import { expectedCardLinkAmountCents } from "./cardSurcharge";
 
 export function cardLinkAmountCents(payment: BudgetPayment | undefined): number | undefined {
   if (!payment) return undefined;
@@ -17,8 +18,8 @@ export function pixChargeAmountCents(payment: BudgetPayment | undefined): number
   return undefined;
 }
 
-/** Valida se o link de cartão está sincronizado com o valor do orçamento (sem depender de frete). */
-export function isCardLinkSynced(payment: BudgetPayment | undefined, amountCents: number): boolean {
+/** Valida se o link de cartão está sincronizado com o valor do orçamento (PIX base + acréscimos). */
+export function isCardLinkSynced(payment: BudgetPayment | undefined, pixBaseCents: number): boolean {
   const url = payment?.paymentLinkUrl?.trim() || "";
   if (
     !url ||
@@ -28,8 +29,9 @@ export function isCardLinkSynced(payment: BudgetPayment | undefined, amountCents
   ) {
     return false;
   }
+  const expectedCardCents = expectedCardLinkAmountCents(pixBaseCents);
   const linkedCents = cardLinkAmountCents(payment);
-  if (linkedCents === undefined || linkedCents !== amountCents) return false;
+  if (linkedCents === undefined || linkedCents !== expectedCardCents) return false;
   if (!url.includes("pagar.me")) return false;
   if (url.includes("localhost") || url.includes("/pagamento/")) return false;
   return true;
@@ -82,12 +84,13 @@ export function mergeBudgetPaymentSnapshot(
   const prevPixCurrent = isPixStillValid(prev, liveAmountCents);
   const remotePixCurrent = isPixStillValid(remote, liveAmountCents);
 
+  const expectedCardCents = expectedCardLinkAmountCents(liveAmountCents);
   const prevHasFreshCard =
     prevCardSynced ||
-    (prev.cardLinkAmountCents === liveAmountCents && !!prev.paymentLinkUrl?.trim());
+    (prev.cardLinkAmountCents === expectedCardCents && !!prev.paymentLinkUrl?.trim());
   const remoteHasStaleCard =
     !remoteCardSynced &&
-    (remote.cardLinkAmountCents == null || remote.cardLinkAmountCents !== liveAmountCents);
+    (remote.cardLinkAmountCents == null || remote.cardLinkAmountCents !== expectedCardCents);
 
   const usePrevCard =
     (prevCardSynced && !remoteCardSynced) ||

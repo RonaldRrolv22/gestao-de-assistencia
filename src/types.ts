@@ -98,6 +98,8 @@ export interface BudgetPayment {
 
 export interface Budget {
   isWarranty: boolean;
+  /** Quando em garantia, cobrar apenas o frete do cliente (via PIX). */
+  chargeShippingOnWarranty?: boolean;
   products: BudgetItemProduct[];
   services: BudgetItemService[];
   discount: number;
@@ -217,6 +219,8 @@ export interface MaintenanceRequest {
 
   // Request description
   openingDate: string; // ISO string or simple YYYY-MM-DD
+  /** Data em que o equipamento foi recebido na empresa (YYYY-MM-DD). */
+  equipmentReceivedDate?: string;
   problemDescription: string;
   initialDiagnostic: string;
 

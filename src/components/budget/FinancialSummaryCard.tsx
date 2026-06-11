@@ -160,7 +160,15 @@ export default function FinancialSummaryCard({
 
         {isWarranty && (
           <div className="bg-slate-100 text-slate-700 text-[10px] p-2.5 rounded-xl border border-slate-200 font-sans leading-relaxed">
-            <strong>Garantia ativada:</strong> valores apresentados, mas o total foi zerado por cobertura.
+            {calculatedTotal > 0 ? (
+              <>
+                <strong>Garantia com frete:</strong> peças e serviços isentos; apenas o frete será cobrado via PIX.
+              </>
+            ) : (
+              <>
+                <strong>Garantia ativada:</strong> valores apresentados, mas o total foi zerado por cobertura.
+              </>
+            )}
           </div>
         )}
 

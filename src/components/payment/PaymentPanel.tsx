@@ -24,6 +24,8 @@ interface PaymentPanelProps {
   shipping?: number;
   payment?: BudgetPayment;
   compact?: boolean;
+  pixOnly?: boolean;
+  expectedCardCents?: number;
   publicToken?: boolean;
   error: string | null;
   message: string | null;
@@ -51,6 +53,8 @@ export default function PaymentPanel({
   totalFinal,
   shipping = 0,
   payment,
+  pixOnly = false,
+  expectedCardCents = 0,
   error,
   message,
   syncingPix,
@@ -97,7 +101,7 @@ export default function PaymentPanel({
   return (
     <SummaryCard
       title="Pagamento"
-      subtitle="PIX e cartão de crédito via Pagar.me"
+      subtitle={pixOnly ? "Frete via PIX (Pagar.me)" : "PIX e cartão de crédito via Pagar.me"}
       headerAction={
         <StatusBadge variant={status.variant} compact className="uppercase tracking-wider">
           {status.label}
@@ -132,12 +136,20 @@ export default function PaymentPanel({
         {cardAmountMismatch && !loadingCard && !syncingCard && (
           <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs">
             Valor alterado (
-            {formatCurrency((cardLinkAmountCents || payment?.amountCents || 0) / 100)} → {formatCurrency(totalFinal)}
+            {formatCurrency((cardLinkAmountCents || payment?.amountCents || 0) / 100)} →{" "}
+            {formatCurrency((expectedCardCents || 0) / 100)}
             ). Clique em &quot;Pagar com cartão de crédito&quot; para gerar um novo link.
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {!pixOnly && expectedCardCents > Math.round(totalFinal * 100) && (
+          <p className="text-[11px] text-slate-600 leading-relaxed">
+            No cartão, o valor inclui acréscimos de parcelamento (até{" "}
+            {formatCurrency(expectedCardCents / 100)} em 10x). PIX permanece em {formatCurrency(totalFinal)}.
+          </p>
+        )}
+
+        <div className={`grid gap-3 ${pixOnly ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}>
           <button
             type="button"
             disabled={loadingPix || syncingPix}
@@ -151,19 +163,21 @@ export default function PaymentPanel({
             )}
             <span>Pagar com PIX</span>
           </button>
-          <button
-            type="button"
-            disabled={loadingCard || syncingCard}
-            onClick={handleCardClick}
-            className={selectedMethod === "card" ? BUDGET_METHOD_ACTIVE : BUDGET_METHOD_IDLE}
-          >
-            {loadingCard || syncingCard ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <CreditCard className="h-5 w-5" />
-            )}
-            <span className="text-center leading-tight">Pagar com cartão de crédito</span>
-          </button>
+          {!pixOnly && (
+            <button
+              type="button"
+              disabled={loadingCard || syncingCard}
+              onClick={handleCardClick}
+              className={selectedMethod === "card" ? BUDGET_METHOD_ACTIVE : BUDGET_METHOD_IDLE}
+            >
+              {loadingCard || syncingCard ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <CreditCard className="h-5 w-5" />
+              )}
+              <span className="text-center leading-tight">Pagar com cartão de crédito</span>
+            </button>
+          )}
         </div>
 
         {selectedMethod === "pix" && hasPix && !pixAmountMismatch && (

@@ -4,6 +4,7 @@
  */
 
 import { MaintenanceRequest } from "../types";
+import { warrantyChargesShipping } from "./maintenanceAccess";
 
 export const MAINTENANCE_SLA_DAYS = 14;
 const WARNING_DAYS_THRESHOLD = 3;
@@ -43,6 +44,9 @@ function toIsoDate(d: Date): string {
 /** Data de confirmação do pagamento ou aprovação em garantia. */
 export function getPaymentConfirmedDate(req: MaintenanceRequest): Date | null {
   if (req.budget?.isWarranty) {
+    if (warrantyChargesShipping(req.budget) && req.budgetPayment?.status === "paid" && req.budgetPayment.paidAt) {
+      return parseDate(req.budgetPayment.paidAt);
+    }
     return parseDate(req.budget.approvedDate) ?? parseDate(req.openingDate);
   }
   if (req.budgetPayment?.status === "paid" && req.budgetPayment.paidAt) {
@@ -52,7 +56,7 @@ export function getPaymentConfirmedDate(req: MaintenanceRequest): Date | null {
 }
 
 export function isAwaitingPayment(req: MaintenanceRequest): boolean {
-  if (req.budget?.isWarranty) return false;
+  if (req.budget?.isWarranty && !warrantyChargesShipping(req.budget)) return false;
   if (req.budgetPayment?.status === "paid") return false;
   if (req.columnId === "manutencao") return true;
   if (req.rat?.status === "Finalizado" && req.columnId !== "liberado") return true;

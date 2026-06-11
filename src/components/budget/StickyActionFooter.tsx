@@ -10,6 +10,7 @@ import ActionButton from "../ui/ActionButton";
 interface StickyActionFooterProps {
   canEdit: boolean;
   isWarranty: boolean;
+  showApproveWarranty?: boolean;
   clientEmail?: string;
   sendingEmail?: boolean;
   emailStatus?: React.ReactNode;
@@ -24,6 +25,7 @@ interface StickyActionFooterProps {
 export default function StickyActionFooter({
   canEdit,
   isWarranty,
+  showApproveWarranty = true,
   clientEmail,
   sendingEmail = false,
   emailStatus,
@@ -86,7 +88,7 @@ export default function StickyActionFooter({
             >
               Orçamento Recusado
             </ActionButton>
-            {isWarranty && (
+            {isWarranty && showApproveWarranty && (
               <ActionButton
                 id="btn-approve-budget"
                 variant="success"
