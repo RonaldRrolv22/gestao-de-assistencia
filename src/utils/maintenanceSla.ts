@@ -5,9 +5,16 @@
 
 import { MaintenanceRequest } from "../types";
 import { warrantyChargesShipping } from "./maintenanceAccess";
-import { REPAIR_EXECUTION_MAX_DAYS } from "../config/operationalDeadlines";
+import { MAINTENANCE_SLA_BUSINESS_DAYS } from "../config/operationalDeadlines";
+import {
+  businessDaysOverdue,
+  businessDaysRemaining,
+  toDateOnly,
+} from "./businessDays";
+import { formatIsoDate, getRepairDeadlineDate } from "./operationalDeadlineInfo";
 
-export const MAINTENANCE_SLA_DAYS = REPAIR_EXECUTION_MAX_DAYS;
+export const MAINTENANCE_SLA_DAYS = MAINTENANCE_SLA_BUSINESS_DAYS;
+
 const WARNING_DAYS_THRESHOLD = 3;
 
 export type SlaStatus =
@@ -28,18 +35,10 @@ export interface MaintenanceSlaInfo {
   label: string;
 }
 
-function toDateOnly(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
 function parseDate(value?: string): Date | null {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function toIsoDate(d: Date): string {
-  return d.toISOString().split("T")[0];
 }
 
 /** Data de confirmação do pagamento ou aprovação em garantia. */
@@ -71,7 +70,7 @@ export function getMaintenanceSlaInfo(req: MaintenanceRequest): MaintenanceSlaIn
     deadlineDate: null,
     daysRemaining: null,
     daysOverdue: null,
-    maxDays: MAINTENANCE_SLA_DAYS,
+    maxDays: MAINTENANCE_SLA_BUSINESS_DAYS,
     label: "",
   };
 
@@ -94,30 +93,28 @@ export function getMaintenanceSlaInfo(req: MaintenanceRequest): MaintenanceSlaIn
     return na;
   }
 
-  const deadline = new Date(paymentDate);
-  deadline.setDate(deadline.getDate() + MAINTENANCE_SLA_DAYS);
-
+  const deadline = getRepairDeadlineDate(paymentDate);
   const today = toDateOnly(new Date());
   const deadlineDay = toDateOnly(deadline);
-  const diffMs = deadlineDay.getTime() - today.getTime();
-  const daysRemaining = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
-  const paymentDateStr = toIsoDate(paymentDate);
-  const deadlineStr = toIsoDate(deadline);
+  const paymentDateStr = formatIsoDate(paymentDate);
+  const deadlineStr = formatIsoDate(deadline);
   const isWarranty = Boolean(req.budget?.isWarranty);
 
-  if (daysRemaining < 0) {
-    const overdue = Math.abs(daysRemaining);
+  if (today > deadlineDay) {
+    const overdue = businessDaysOverdue(deadlineDay, today);
     return {
       status: "overdue",
       paymentDate: paymentDateStr,
       deadlineDate: deadlineStr,
       daysRemaining: 0,
       daysOverdue: overdue,
-      maxDays: MAINTENANCE_SLA_DAYS,
-      label: `Atrasado há ${overdue} dia${overdue === 1 ? "" : "s"}`,
+      maxDays: MAINTENANCE_SLA_BUSINESS_DAYS,
+      label: `Atrasado há ${overdue} dia${overdue === 1 ? "" : "s"} útei${overdue === 1 ? "l" : "s"}`,
     };
   }
+
+  const daysRemaining = businessDaysRemaining(today, deadlineDay);
 
   if (daysRemaining <= WARNING_DAYS_THRESHOLD) {
     return {
@@ -126,8 +123,8 @@ export function getMaintenanceSlaInfo(req: MaintenanceRequest): MaintenanceSlaIn
       deadlineDate: deadlineStr,
       daysRemaining,
       daysOverdue: null,
-      maxDays: MAINTENANCE_SLA_DAYS,
-      label: `Restam ${daysRemaining} dia${daysRemaining === 1 ? "" : "s"}`,
+      maxDays: MAINTENANCE_SLA_BUSINESS_DAYS,
+      label: `Restam ${daysRemaining} dia${daysRemaining === 1 ? "" : "s"} útei${daysRemaining === 1 ? "l" : "s"}`,
     };
   }
 
@@ -137,15 +134,15 @@ export function getMaintenanceSlaInfo(req: MaintenanceRequest): MaintenanceSlaIn
     deadlineDate: deadlineStr,
     daysRemaining,
     daysOverdue: null,
-    maxDays: MAINTENANCE_SLA_DAYS,
-    label: `Restam ${daysRemaining} dia${daysRemaining === 1 ? "" : "s"}`,
+    maxDays: MAINTENANCE_SLA_BUSINESS_DAYS,
+    label: `Restam ${daysRemaining} dia${daysRemaining === 1 ? "" : "s"} útei${daysRemaining === 1 ? "l" : "s"}`,
   };
 }
 
 export function getRemainingDaysForMaintenance(req: MaintenanceRequest): number {
   const sla = getMaintenanceSlaInfo(req);
   if (sla.status === "awaiting_payment" || sla.status === "not_applicable") {
-    return MAINTENANCE_SLA_DAYS;
+    return MAINTENANCE_SLA_BUSINESS_DAYS;
   }
   if (sla.daysRemaining !== null && sla.daysRemaining >= 0) {
     return sla.daysRemaining;
@@ -153,5 +150,5 @@ export function getRemainingDaysForMaintenance(req: MaintenanceRequest): number 
   if (sla.daysOverdue !== null) {
     return -sla.daysOverdue;
   }
-  return MAINTENANCE_SLA_DAYS;
+  return MAINTENANCE_SLA_BUSINESS_DAYS;
 }
