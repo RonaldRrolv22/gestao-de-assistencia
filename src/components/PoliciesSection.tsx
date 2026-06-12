@@ -6,6 +6,7 @@
 import React, { useState } from "react";
 import { ArrowLeft, Download, ExternalLink, FileText, Truck } from "lucide-react";
 import { POLICY_DOCUMENTS, PolicyDocument } from "../config/policies";
+import OperationalDeadlinesPanel from "./policies/OperationalDeadlinesPanel";
 import PageHeader from "./ui/PageHeader";
 import ActionButton from "./ui/ActionButton";
 
@@ -78,6 +79,8 @@ export default function PoliciesSection() {
           title="Políticas"
           subtitle="Documentos oficiais e diretrizes da operação"
         />
+
+        <OperationalDeadlinesPanel />
 
         <section className="space-y-4">
           <p className="reports-section-label px-1">Documentos disponíveis</p>

@@ -8,6 +8,7 @@ import { MaintenanceRequest } from "../../types";
 import EmailStatusIcons from "../ui/EmailStatusIcons";
 import { formatDate } from "../../utils";
 import { getMaintenanceSlaInfo, isAwaitingPayment, MaintenanceSlaInfo } from "../../utils/maintenanceSla";
+import { getRequestDeadlineHints } from "../../utils/operationalDeadlineInfo";
 import { getRejectedDaysRemainingInKanban, isBudgetRejected } from "../../utils/rejectedBudget";
 import { KANBAN_COLUMNS } from "./kanbanConfig";
 
@@ -46,7 +47,7 @@ function getPaymentLabel(req: MaintenanceRequest, awaitingPayment: boolean): str
 }
 
 function buildSlaRows(sla: MaintenanceSlaInfo): SummaryRow[] {
-  const rows: SummaryRow[] = [{ label: "Prazo", value: `${sla.maxDays} dias` }];
+  const rows: SummaryRow[] = [{ label: "Prazo CDC", value: `${sla.maxDays} dias` }];
 
   if (sla.deadlineDate) {
     rows.push({ label: "Data limite", value: formatDate(sla.deadlineDate) });
@@ -78,6 +79,7 @@ function buildSummary(req: MaintenanceRequest): OperationalSummary | null {
     sla.status !== "not_applicable" &&
     sla.status !== "awaiting_payment";
 
+  const deadlineHints = getRequestDeadlineHints(req);
   const rows: SummaryRow[] = [{ label: "Etapa", value: stage }];
 
   if (rejected && isOrcamento) {
@@ -95,21 +97,11 @@ function buildSummary(req: MaintenanceRequest): OperationalSummary | null {
     };
   }
 
-  if (req.columnId === "liberado") {
-    if (req.shippingLabel?.trackingCode) {
-      rows.push({ label: "Rastreio", value: req.shippingLabel.trackingCode });
-    }
-    return {
-      headline: "Liberado para entrega",
-      tone: "success",
-      rows,
-    };
-  }
-
-  if (req.rat?.status === "Finalizado") {
+  if (req.rat?.status === "Finalizado" && req.columnId !== "liberado") {
     rows.push({ label: "Status", value: "Aguardando liberação" });
     if (payment) rows.push({ label: "Pagamento", value: payment });
     if (showSla) rows.push(...buildSlaRows(sla));
+    rows.push(...deadlineHints);
     return {
       headline: "RAT finalizada",
       tone: showSla && sla.status === "overdue" ? "danger" : "neutral",
@@ -123,6 +115,7 @@ function buildSummary(req: MaintenanceRequest): OperationalSummary | null {
 
   if (showSla) {
     rows.push(...buildSlaRows(sla));
+    rows.push(...deadlineHints);
     const headline =
       sla.status === "overdue"
         ? "Prazo vencido"
@@ -135,6 +128,7 @@ function buildSummary(req: MaintenanceRequest): OperationalSummary | null {
   }
 
   if (awaitingPayment) {
+    rows.push(...deadlineHints);
     return {
       headline: "Aguardando pagamento",
       tone: "neutral",
@@ -143,6 +137,7 @@ function buildSummary(req: MaintenanceRequest): OperationalSummary | null {
   }
 
   if (req.columnId === "solicitacao") {
+    rows.push(...deadlineHints);
     return {
       headline: "Triagem de entrada",
       tone: "neutral",
@@ -151,6 +146,7 @@ function buildSummary(req: MaintenanceRequest): OperationalSummary | null {
   }
 
   if (req.columnId === "orcamento" && req.budget?.isApproved) {
+    rows.push(...deadlineHints);
     return {
       headline: "Orçamento aprovado",
       tone: "neutral",
@@ -159,11 +155,28 @@ function buildSummary(req: MaintenanceRequest): OperationalSummary | null {
   }
 
   if (req.columnId === "manutencao") {
+    rows.push(...deadlineHints);
     return {
       headline: "Manutenção em andamento",
       tone: "neutral",
       rows,
     };
+  }
+
+  if (req.columnId === "liberado") {
+    if (req.shippingLabel?.trackingCode) {
+      rows.push({ label: "Rastreio", value: req.shippingLabel.trackingCode });
+    }
+    rows.push(...deadlineHints);
+    return {
+      headline: "Liberado para entrega",
+      tone: "success",
+      rows,
+    };
+  }
+
+  if (deadlineHints.length > 0) {
+    rows.push(...deadlineHints);
   }
 
   return {

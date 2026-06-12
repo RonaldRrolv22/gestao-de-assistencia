@@ -9,6 +9,7 @@ import { MaintenanceRequest } from "../../types";
 import EmptyState from "../ui/EmptyState";
 import ServiceOrderCard from "./ServiceOrderCard";
 import { KanbanColumnConfig } from "./kanbanConfig";
+import { getPrimaryDeadlineForStage } from "../../config/operationalDeadlines";
 
 interface KanbanColumnProps {
   config: KanbanColumnConfig;
@@ -46,6 +47,7 @@ export default function KanbanColumn({
   const isOrcamentoColumn = config.id === "orcamento";
   const isLiberadoColumn = config.id === "liberado";
   const stepLabel = config.shortTitle ?? config.title;
+  const deadlineSummary = getPrimaryDeadlineForStage(config.id)?.shortLabel;
 
   return (
     <div
@@ -63,6 +65,11 @@ export default function KanbanColumn({
             </h3>
             {config.subtitle && (
               <p className="text-[10px] text-text-secondary/80 truncate mt-0.5">{config.subtitle}</p>
+            )}
+            {deadlineSummary && (
+              <p className="text-[9px] text-brand-orange/90 truncate mt-0.5 leading-snug" title={deadlineSummary}>
+                Prazo ref.: {deadlineSummary}
+              </p>
             )}
           </div>
         </div>

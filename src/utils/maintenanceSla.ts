@@ -5,8 +5,9 @@
 
 import { MaintenanceRequest } from "../types";
 import { warrantyChargesShipping } from "./maintenanceAccess";
+import { REPAIR_EXECUTION_MAX_DAYS } from "../config/operationalDeadlines";
 
-export const MAINTENANCE_SLA_DAYS = 14;
+export const MAINTENANCE_SLA_DAYS = REPAIR_EXECUTION_MAX_DAYS;
 const WARNING_DAYS_THRESHOLD = 3;
 
 export type SlaStatus =
