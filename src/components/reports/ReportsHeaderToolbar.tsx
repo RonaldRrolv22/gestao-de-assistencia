@@ -34,15 +34,16 @@ export default function ReportsHeaderToolbar({
   if (compact) {
     return (
       <div className="flex flex-col gap-2 w-full lg:flex-row lg:items-center lg:justify-end lg:gap-3">
-        <div className="flex items-center gap-2 glass-toolbar rounded-xl p-1 w-full lg:w-auto overflow-x-auto report-chart-scroll">
+        <div className="flex items-center gap-2 glass-toolbar rounded-xl p-1 w-full lg:w-auto overflow-x-auto report-chart-scroll relative z-10">
           <Calendar className="h-3.5 w-3.5 text-brand-orange shrink-0 ml-0.5 hidden sm:block" />
-          <div className="flex items-center gap-0.5 min-w-0">
+          <div className="flex items-center gap-0.5 min-w-0 relative z-10">
             {PERIOD_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
                 onClick={() => onTimeFilterChange(opt.value)}
-                className={`report-period-pill ${timeFilter === opt.value ? "report-period-pill-active" : ""}`}
+                aria-pressed={timeFilter === opt.value}
+                className={`report-period-pill relative z-10 ${timeFilter === opt.value ? "report-period-pill-active" : ""}`}
                 id={opt.value === "all" ? "time-filter-select" : undefined}
               >
                 {opt.label}
@@ -78,15 +79,16 @@ export default function ReportsHeaderToolbar({
 
   return (
     <div className="flex flex-col gap-3 w-full lg:w-auto lg:items-end">
-      <div className="flex items-center gap-2 glass-toolbar rounded-xl p-1.5 w-full lg:w-auto overflow-x-auto report-chart-scroll">
+      <div className="flex items-center gap-2 glass-toolbar rounded-xl p-1.5 w-full lg:w-auto overflow-x-auto report-chart-scroll relative z-10">
         <Calendar className="h-4 w-4 text-brand-orange shrink-0 ml-1 hidden sm:block" />
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-1 min-w-0 relative z-10">
           {PERIOD_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               type="button"
               onClick={() => onTimeFilterChange(opt.value)}
-              className={`report-period-pill ${timeFilter === opt.value ? "report-period-pill-active" : ""}`}
+              aria-pressed={timeFilter === opt.value}
+              className={`report-period-pill relative z-10 ${timeFilter === opt.value ? "report-period-pill-active" : ""}`}
               id={opt.value === "all" ? "time-filter-select" : undefined}
             >
               {opt.label}

@@ -7,10 +7,15 @@ import { KanbanColumnId, MaintenanceRequest } from "../types";
 import { isBudgetRejected } from "./rejectedBudget";
 import { buildFreteSummaryLabel } from "./budgetCommercialPdf";
 import { formatCurrency } from "../utils";
+import {
+  ReportTimeFilter,
+  matchesReportTimeFilter,
+  parseReportDate,
+} from "./reportMetrics";
 
 export type BudgetDecision = "Pendente" | "Aprovado" | "Reprovado";
 export type StageFilter = "all" | "orcamento" | "manutencao" | "liberado" | "recusado";
-export type TimeFilter = "30" | "90" | "year" | "all";
+export type TimeFilter = ReportTimeFilter;
 
 export function getBudgetDecision(request: MaintenanceRequest): BudgetDecision {
   if (isBudgetRejected(request)) return "Reprovado";
@@ -108,15 +113,7 @@ export function matchesStageFilter(request: MaintenanceRequest, stage: StageFilt
 }
 
 export function matchesTimeFilter(request: MaintenanceRequest, timeFilter: TimeFilter): boolean {
-  if (timeFilter === "all") return true;
-  if (!request.openingDate) return false;
-  const now = new Date();
-  const openedDate = new Date(request.openingDate);
-  const diffDays = (now.getTime() - openedDate.getTime()) / (1000 * 60 * 60 * 24);
-  if (timeFilter === "30") return diffDays <= 30;
-  if (timeFilter === "90") return diffDays <= 90;
-  if (timeFilter === "year") return openedDate.getFullYear() === now.getFullYear();
-  return true;
+  return matchesReportTimeFilter(request, timeFilter);
 }
 
 export function matchesSearch(request: MaintenanceRequest, query: string): boolean {
@@ -150,8 +147,8 @@ export function filterOsDatabaseRows(
     .filter((r) => matchesStageFilter(r, options.stage))
     .filter((r) => matchesTimeFilter(r, options.timeFilter))
     .sort((a, b) => {
-      const da = a.openingDate ? new Date(a.openingDate).getTime() : 0;
-      const db = b.openingDate ? new Date(b.openingDate).getTime() : 0;
+      const da = parseReportDate(a.openingDate)?.getTime() ?? 0;
+      const db = parseReportDate(b.openingDate)?.getTime() ?? 0;
       return db - da;
     });
 }

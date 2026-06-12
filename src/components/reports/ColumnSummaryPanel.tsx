@@ -13,6 +13,7 @@ interface ColumnSummaryPanelProps {
   totalBudget: number;
   totalInMaintenance: number;
   totalReleased: number;
+  periodLabel?: string;
 }
 
 const COLUMNS = [
@@ -27,6 +28,7 @@ export default function ColumnSummaryPanel({
   totalBudget,
   totalInMaintenance,
   totalReleased,
+  periodLabel,
 }: ColumnSummaryPanelProps) {
   const values = {
     solicitacao: totalOpen,
@@ -39,8 +41,12 @@ export default function ColumnSummaryPanel({
   return (
     <DashboardPanel
       title="Resumo da operação"
-      subtitle="Distribuição das O.S. por etapa"
-      action={<DashboardChip tone="brand">{total} ativas</DashboardChip>}
+      subtitle={
+        periodLabel
+          ? `Distribuição por etapa · ${periodLabel}`
+          : "Distribuição das O.S. por etapa"
+      }
+      action={<DashboardChip tone="brand">{total} no período</DashboardChip>}
     >
       <div className="space-y-3.5">
         {COLUMNS.map((col) => {

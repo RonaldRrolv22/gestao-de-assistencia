@@ -18,6 +18,15 @@ import EquipmentDoughnutChart from "./reports/EquipmentDoughnutChart";
 import ServiceTimeBarsChart from "./reports/ServiceTimeBarsChart";
 import { appNoticeError } from "../utils/appNotice";
 import { DONUT_WARM_PALETTE } from "./reports/reportsPalette";
+import {
+  ReportTimeFilter,
+  REPORT_TIME_FILTER_LABELS,
+  filterRequestsByReportTime,
+  isDateInTimeFilter,
+  isOrcamentoColumn,
+  isReleasedInReportPeriod,
+  parseReportDate,
+} from "../utils/reportMetrics";
 
 interface ReportsSectionProps {
   requests: MaintenanceRequest[];
@@ -26,81 +35,65 @@ interface ReportsSectionProps {
 }
 
 export default function ReportsSection({ requests, products, onNavigateToKanban }: ReportsSectionProps) {
-  const [timeFilter, setTimeFilter] = React.useState<"30" | "90" | "year" | "all">("all");
+  const [timeFilter, setTimeFilter] = React.useState<ReportTimeFilter>("all");
   const [exportingPdf, setExportingPdf] = React.useState(false);
 
-  // Filter requests based on selection
-  const filteredRequests = React.useMemo(() => {
-    if (timeFilter === "all") return requests;
-    const now = new Date();
-    return requests.filter(r => {
-      if (!r.openingDate) return false;
-      const openedDate = new Date(r.openingDate);
-      const diffTime = now.getTime() - openedDate.getTime();
-      const diffDays = diffTime / (1000 * 60 * 60 * 24);
-      if (timeFilter === "30") {
-        return diffDays <= 30;
-      }
-      if (timeFilter === "90") {
-        return diffDays <= 90;
-      }
-      if (timeFilter === "year") {
-        return openedDate.getFullYear() === now.getFullYear();
-      }
-      return true;
-    });
-  }, [requests, timeFilter]);
+  const filteredRequests = React.useMemo(
+    () => filterRequestsByReportTime(requests, timeFilter),
+    [requests, timeFilter]
+  );
 
-  // 1. Calculations: Quantities
-  const totalOpen = filteredRequests.filter(r => r.columnId === "solicitacao").length;
-  const totalBudget = filteredRequests.filter(r => r.columnId === "orcamento").length;
-  const totalInMaintenance = filteredRequests.filter(r => r.columnId === "manutencao").length;
-  const totalReleased = filteredRequests.filter(r => r.columnId === "liberado").length;
+  const releasedInPeriod = React.useMemo(
+    () => filteredRequests.filter((r) => isReleasedInReportPeriod(r, timeFilter)),
+    [filteredRequests, timeFilter]
+  );
 
-  // 2. Calculation: Valor total faturado (sum of paid or released quotes final totals)
+  // 1. Quantidades por coluna (O.S. com atividade no período)
+  const totalOpen = filteredRequests.filter((r) => r.columnId === "solicitacao").length;
+  const totalBudget = filteredRequests.filter((r) => isOrcamentoColumn(r.columnId)).length;
+  const totalInMaintenance = filteredRequests.filter((r) => r.columnId === "manutencao").length;
+  const totalReleased = releasedInPeriod.length;
+
+  // 2. Faturamento — liberados no período (data de liberação)
   let totalBilled = 0;
-  filteredRequests.forEach(r => {
-    if (r.columnId === "liberado" && r.budget && !r.budget.isWarranty) {
+  releasedInPeriod.forEach((r) => {
+    if (r.budget && !r.budget.isWarranty) {
       totalBilled += r.budget.totalFinal;
     }
   });
 
-  // 3. Calculation: Valor total em garantia (sum of what WOULD have been charged)
+  // 3. Valor estimado em garantias (O.S. em garantia no período)
   let totalWarrantyValue = 0;
-  filteredRequests.forEach(r => {
+  filteredRequests.forEach((r) => {
     if (r.budget && r.budget.isWarranty) {
-      // Find standard price of associated products if listed
-      r.budget.products.forEach(bp => {
-        // Find standard price in catalog
-        const catProd = products.find(p => p.id === bp.productId);
+      r.budget.products.forEach((bp) => {
+        const catProd = products.find((p) => p.id === bp.productId);
         totalWarrantyValue += (catProd ? catProd.baseValue : 300) * bp.quantity;
       });
-      // Add general services if any
-      r.budget.services.forEach(bs => {
-        totalWarrantyValue += 150 * bs.quantity; // estimate standard service if set to 0
+      r.budget.services.forEach(() => {
+        totalWarrantyValue += 150;
       });
     }
   });
 
-  // 4. Calculation: Tempo médio de manutenção (Average duration in days)
+  // 4. Tempo médio de resolução (abertura → liberação, só liberados no período)
   let totalDiffMs = 0;
   let countReleasedForAvg = 0;
-  filteredRequests.forEach(r => {
-    if (r.columnId === "liberado" && r.openingDate && r.releasedDate) {
-      const open = new Date(r.openingDate);
-      const released = new Date(r.releasedDate);
+  releasedInPeriod.forEach((r) => {
+    const open = parseReportDate(r.openingDate);
+    const released = parseReportDate(r.releasedDate);
+    if (open && released) {
       const diffMs = released.getTime() - open.getTime();
-      if (!isNaN(diffMs) && diffMs >= 0) {
+      if (diffMs >= 0) {
         totalDiffMs += diffMs;
         countReleasedForAvg += 1;
       }
     }
   });
 
-  const avgDaysDecimal = countReleasedForAvg > 0 
-    ? (totalDiffMs / (1000 * 60 * 60 * 24)) 
-    : 2.5; // fallback realistic default
-  const avgDaysFormatted = avgDaysDecimal.toFixed(1);
+  const avgDaysDecimal =
+    countReleasedForAvg > 0 ? totalDiffMs / countReleasedForAvg / (1000 * 60 * 60 * 24) : 0;
+  const avgDaysFormatted = countReleasedForAvg > 0 ? avgDaysDecimal.toFixed(1) : "—";
 
   // 5. Calculation: Equipamentos mais recorrentes
   const equipmentCounts = React.useMemo(() => {
@@ -162,53 +155,50 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
       .slice(0, 5);
   }, [clientCounts]);
 
-  // Calculation: Taxa de recorrência
+  // Taxa de recorrência — clientes com 2+ O.S. no período / total de clientes únicos
   const recurrenceRate = React.useMemo(() => {
-    const clientsWithMoreThanOne = (Object.values(clientCounts) as Array<{ company: string; count: number }>).filter(c => c.count > 1).length;
-    const totalVisits = filteredRequests.length;
-    if (totalVisits === 0) return "0.0%";
-    return `${((clientsWithMoreThanOne / totalVisits) * 100).toFixed(1)}%`;
-  }, [clientCounts, filteredRequests]);
+    const uniqueClients = Object.keys(clientCounts).length;
+    const clientsWithMoreThanOne = (Object.values(clientCounts) as Array<{ company: string; count: number }>).filter(
+      (c) => c.count > 1
+    ).length;
+    if (uniqueClients === 0) return "0.0%";
+    return `${((clientsWithMoreThanOne / uniqueClients) * 100).toFixed(1)}%`;
+  }, [clientCounts]);
 
-  // Calculation: MTTR (Mean Time to Repair)
   const mttrValue = React.useMemo(() => {
     let totalMs = 0;
     let count = 0;
-    
-    filteredRequests.forEach(r => {
-      if (r.movementHistory && r.movementHistory.length > 0) {
-        const sortedHistory = [...r.movementHistory].sort(
-          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
-        let startMaintenanceTime: number | null = null;
-        for (const log of sortedHistory) {
-          if (log.toColumn === "manutencao") {
-            startMaintenanceTime = new Date(log.timestamp).getTime();
-          } else if (startMaintenanceTime && log.toColumn === "liberado") {
-            const endMaintenanceTime = new Date(log.timestamp).getTime();
-            const diff = endMaintenanceTime - startMaintenanceTime;
-            if (diff >= 0) {
-              totalMs += diff;
-              count++;
-            }
-            startMaintenanceTime = null; 
+
+    releasedInPeriod.forEach((r) => {
+      if (!r.movementHistory?.length) return;
+
+      const sortedHistory = [...r.movementHistory].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      let startMaintenanceTime: number | null = null;
+      for (const log of sortedHistory) {
+        if (log.toColumn === "manutencao") {
+          startMaintenanceTime = new Date(log.timestamp).getTime();
+        } else if (startMaintenanceTime && log.toColumn === "liberado") {
+          const endMaintenanceTime = new Date(log.timestamp).getTime();
+          const diff = endMaintenanceTime - startMaintenanceTime;
+          if (diff >= 0) {
+            totalMs += diff;
+            count++;
           }
+          startMaintenanceTime = null;
         }
       }
     });
-    
-    if (count > 0) {
-      const avgHours = totalMs / (1000 * 60 * 60);
-      if (avgHours < 24) {
-        return `${avgHours.toFixed(1)}h`;
-      } else {
-        const avgDays = avgHours / 24;
-        return `${avgDays.toFixed(1)}d`;
-      }
+
+    if (count === 0) return "—";
+
+    const avgHours = totalMs / count / (1000 * 60 * 60);
+    if (avgHours < 24) {
+      return `${avgHours.toFixed(1)}h`;
     }
-    const baseVal = parseFloat(avgDaysFormatted) * 0.4;
-    return `${baseVal > 0 ? baseVal.toFixed(1) : "1.2"}d`;
-  }, [filteredRequests, avgDaysFormatted]);
+    return `${(avgHours / 24).toFixed(1)}d`;
+  }, [releasedInPeriod]);
 
   // Helper to format decimal hours elegantly (e.g. 1.5 -> "1h 30min")
   const formatDecimalHours = React.useCallback((decimalHours: number): string => {
@@ -224,64 +214,45 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
     }
   }, []);
 
-  // Calibration/Service types average times (Average Hours based on "Horas Técnicas e Mão de Obra" / RAT Labor logs)
   const serviceAverages = React.useMemo(() => {
     const serviceMap: Record<string, number[]> = {};
 
-    filteredRequests.forEach(r => {
-      if (r.budget && r.budget.services) {
-        // Calculate sum of totalMinutes from r.rat?.labor
-        const totalMinutes = r.rat?.labor
-          ? r.rat.labor.reduce((sum, item) => sum + (item.totalMinutes || 0), 0)
-          : 0;
-        const totalHours = totalMinutes / 60;
-        
-        r.budget.services.forEach(s => {
-          if (s.description) {
-            if (!serviceMap[s.description]) {
-              serviceMap[s.description] = [];
-            }
-            serviceMap[s.description].push(totalHours);
-          }
-        });
-      }
-    });
+    releasedInPeriod.forEach((r) => {
+      if (!r.budget?.services?.length) return;
 
-    const result = Object.entries(serviceMap).map(([description, hoursList]) => {
-      const nonZeroHours = hoursList.filter(h => h > 0);
-      let avg = nonZeroHours.length > 0
-        ? nonZeroHours.reduce((a, b) => a + b, 0) / nonZeroHours.length
+      const totalMinutes = r.rat?.labor
+        ? r.rat.labor.reduce((sum, item) => sum + (item.totalMinutes || 0), 0)
         : 0;
-      
-      // Fallback hours helper if no non-zero custom hours exist yet
-      if (avg === 0) {
-        if (description.includes("Diagnóstico")) avg = 1.5;
-        else if (description.includes("Calibração")) avg = 2.5;
-        else if (description.includes("Mão de Obra")) avg = 2.0;
-        else if (description.includes("Preventiva")) avg = 1.0;
-        else avg = 1.2;
-      }
+      const totalHours = totalMinutes / 60;
 
-      return {
-        description,
-        avgHours: parseFloat(avg.toFixed(2)),
-        count: hoursList.length
-      };
+      r.budget.services.forEach((s) => {
+        if (!s.description) return;
+        if (!serviceMap[s.description]) {
+          serviceMap[s.description] = [];
+        }
+        serviceMap[s.description].push(totalHours);
+      });
     });
 
-    result.sort((a, b) => b.count - a.count);
+    const result = Object.entries(serviceMap)
+      .map(([description, hoursList]) => {
+        const nonZeroHours = hoursList.filter((h) => h > 0);
+        const avg =
+          nonZeroHours.length > 0
+            ? nonZeroHours.reduce((a, b) => a + b, 0) / nonZeroHours.length
+            : 0;
 
-    if (result.length === 0) {
-      return [
-        { description: "Diagnóstico Avançado de Hardware", avgHours: 1.5, count: 4 },
-        { description: "Calibração e Alinhamento Técnico", avgHours: 2.5, count: 3 },
-        { description: "Mão de Obra para Troca de Placa", avgHours: 3.0, count: 5 },
-        { description: "Manutenção Preventiva Geral", avgHours: 1.0, count: 8 },
-        { description: "Teste de Carga e Software de Firmware", avgHours: 0.8, count: 6 },
-      ].slice(0, 5);
-    }
+        return {
+          description,
+          avgHours: parseFloat(avg.toFixed(2)),
+          count: hoursList.length,
+        };
+      })
+      .filter((item) => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+
     return result.slice(0, 5);
-  }, [filteredRequests]);
+  }, [releasedInPeriod]);
 
   // Line Chart monthly finished O.S. computation
   const monthlyData = React.useMemo(() => {
@@ -298,21 +269,20 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
       });
     }
 
-    filteredRequests.forEach(r => {
-      if (r.columnId === "liberado" && r.releasedDate) {
-        const rDate = new Date(r.releasedDate);
-        if (!isNaN(rDate.getTime())) {
-          const m = rDate.getMonth();
-          const y = rDate.getFullYear();
-          const found = result.find(item => item.index === m && item.year === y);
-          if (found) {
-            found.count += 1;
-          }
-        }
+    filteredRequests.forEach((r) => {
+      if (!isReleasedInReportPeriod(r, timeFilter)) return;
+      const rDate = parseReportDate(r.releasedDate);
+      if (!rDate) return;
+
+      const m = rDate.getMonth();
+      const y = rDate.getFullYear();
+      const found = result.find((item) => item.index === m && item.year === y);
+      if (found) {
+        found.count += 1;
       }
     });
     return result;
-  }, [filteredRequests]);
+  }, [filteredRequests, timeFilter]);
 
   const pathD = React.useMemo(() => {
     const maxVal = Math.max(...monthlyData.map(d => d.count), 5);
@@ -345,20 +315,27 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
       monthlyData.findIndex((m) => m.index === date.getMonth() && m.year === date.getFullYear());
 
     filteredRequests.forEach((r) => {
-      if (r.budget?.isWarranty && r.openingDate) {
-        const idx = bucketIndex(new Date(r.openingDate));
+      if (r.budget?.isWarranty && r.openingDate && isDateInTimeFilter(r.openingDate, timeFilter)) {
+        const opened = parseReportDate(r.openingDate);
+        if (!opened) return;
+        const idx = bucketIndex(opened);
         if (idx >= 0) warranty[idx] += 1;
       }
-      if (r.columnId === "liberado" && r.releasedDate) {
-        const idx = bucketIndex(new Date(r.releasedDate));
-        if (idx >= 0 && r.budget && !r.budget.isWarranty) {
-          billing[idx] += r.budget.totalFinal;
-        }
-        if (idx >= 0 && r.openingDate) {
-          const open = new Date(r.openingDate);
-          const released = new Date(r.releasedDate);
+
+      if (!isReleasedInReportPeriod(r, timeFilter)) return;
+
+      const released = parseReportDate(r.releasedDate);
+      if (!released) return;
+
+      const idx = bucketIndex(released);
+      if (idx >= 0 && r.budget && !r.budget.isWarranty) {
+        billing[idx] += r.budget.totalFinal;
+      }
+      if (idx >= 0) {
+        const open = parseReportDate(r.openingDate);
+        if (open) {
           const diffDays = (released.getTime() - open.getTime()) / (1000 * 60 * 60 * 24);
-          if (!isNaN(diffDays) && diffDays >= 0) {
+          if (diffDays >= 0) {
             resolutionSum[idx] += diffDays;
             resolutionCount[idx] += 1;
           }
@@ -371,7 +348,7 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
     );
 
     return { billing, releases, resolution, warranty };
-  }, [filteredRequests, monthlyData]);
+  }, [filteredRequests, monthlyData, timeFilter]);
 
   // CSV Excel Exportation handler
   const handleExportCSV = () => {
@@ -389,7 +366,7 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
       "Data Liberacao"
     ];
 
-    const rows = requests.map(r => [
+    const rows = filteredRequests.map((r) => [
       r.id,
       r.clientName,
       r.clientCompany,
@@ -539,7 +516,7 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
     <div class="grid-stats">
       <div class="stat-card">
         <div class="stat-label">Chamados Ativos</div>
-        <div class="stat-value">${requests.filter(r => r.columnId !== "liberado").length} Os</div>
+        <div class="stat-value">${filteredRequests.filter((r) => r.columnId !== "liberado").length} Os</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Faturamento Total</div>
@@ -627,7 +604,7 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
         <PageHeader
           variant="page"
           title="Relatórios & Métricas"
-          subtitle="Acompanhamento operacional, financeiro e controle de garantias"
+          subtitle={`Acompanhamento operacional, financeiro e controle de garantias · ${REPORT_TIME_FILTER_LABELS[timeFilter]} (${filteredRequests.length} O.S.)`}
         >
           <ReportsHeaderToolbar
             compact
@@ -640,6 +617,7 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
         </PageHeader>
 
         <ReportsMetricStrip
+          filterKey={timeFilter}
           items={[
             {
               label: "Faturamento",
@@ -660,7 +638,7 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
             },
             {
               label: "Tempo médio resolução",
-              value: `${avgDaysFormatted} dias`,
+              value: countReleasedForAvg > 0 ? `${avgDaysFormatted} dias` : "—",
               icon: <Clock className="h-4 w-4" strokeWidth={2.25} />,
               variant: "resolution",
               sparklineData: kpiSparklines.resolution,
@@ -687,6 +665,7 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
             totalBudget={totalBudget}
             totalInMaintenance={totalInMaintenance}
             totalReleased={totalReleased}
+            periodLabel={REPORT_TIME_FILTER_LABELS[timeFilter]}
           />
         </div>
 

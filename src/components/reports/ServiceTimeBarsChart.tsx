@@ -39,7 +39,12 @@ export default function ServiceTimeBarsChart({ data, formatHours }: ServiceTimeB
       action={<DashboardChip tone="brand">Média em horas</DashboardChip>}
     >
       <div className="space-y-3">
-        {data.map((srv, idx) => {
+        {data.length === 0 ? (
+          <p className="text-xs text-slate-500 py-6 text-center">
+            Sem serviços finalizados no período selecionado.
+          </p>
+        ) : (
+          data.map((srv, idx) => {
           const widthPercent = (srv.avgHours / maxAvg) * 100;
           return (
             <div key={`${srv.description}-${idx}`} className="space-y-1.5">
@@ -68,7 +73,8 @@ export default function ServiceTimeBarsChart({ data, formatHours }: ServiceTimeB
               </div>
             </div>
           );
-        })}
+        })
+        )}
       </div>
     </DashboardPanel>
   );
