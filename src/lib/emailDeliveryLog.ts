@@ -45,6 +45,8 @@ function legacyFieldsForSuccess(
       return { ratEmailSentAt: sentAt, ratEmailSentBy: sentBy || "Sistema" };
     case "maintenance_started":
       return { maintenanceStartedEmailSentAt: sentAt };
+    case "equipment_received":
+      return { equipmentReceivedEmailSentAt: sentAt };
     case "tracking":
       return { trackingEmailSentAt: sentAt, trackingEmailSentBy: sentBy || "Sistema" };
   }
@@ -75,6 +77,8 @@ export function hasSuccessfulDelivery(
       return Boolean(request.ratEmailSentAt);
     case "maintenance_started":
       return Boolean(request.maintenanceStartedEmailSentAt || request.paymentConfirmationEmailSentAt);
+    case "equipment_received":
+      return Boolean(request.equipmentReceivedEmailSentAt);
     case "tracking":
       return Boolean(request.trackingEmailSentAt);
   }

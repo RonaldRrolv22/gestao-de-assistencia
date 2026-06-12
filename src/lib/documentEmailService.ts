@@ -11,6 +11,7 @@ import { hasSuccessfulDelivery } from "./emailDeliveryLog";
 import {
   dispatchBudgetEmail,
   dispatchMaintenanceStartedEmail,
+  dispatchEquipmentReceivedEmail,
   dispatchRatEmail,
   dispatchTrackingEmail,
   DispatchEmailResult,
@@ -119,6 +120,23 @@ export async function triggerRatFinalizedEmail(requestId: string): Promise<Trigg
   const result = await dispatchRatEmail(requestId, "Sistema", {
     skipRateLimit: true,
     trigger: "auto_finalize_rat",
+  });
+  return toTriggerResult(result);
+}
+
+export async function triggerEquipmentReceivedEmail(
+  requestId: string
+): Promise<TriggerEmailResult> {
+  const request = await loadRequest(requestId);
+
+  if (!request.equipmentReceivedDate?.trim()) {
+    throw new Error("Informe a data de recebimento antes de enviar o e-mail.");
+  }
+
+  const result = await dispatchEquipmentReceivedEmail(requestId, {
+    trigger: "auto_equipment_received",
+    sentBy: "Sistema",
+    allowResend: true,
   });
   return toTriggerResult(result);
 }

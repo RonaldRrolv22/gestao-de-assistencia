@@ -169,7 +169,7 @@ export interface ShippingLabel {
   generatedBy?: string;
 }
 
-export type EmailDeliveryType = "budget" | "maintenance_started" | "rat" | "tracking";
+export type EmailDeliveryType = "budget" | "maintenance_started" | "rat" | "tracking" | "equipment_received";
 
 export type EmailDeliveryStatus = "sent" | "failed" | "skipped";
 
@@ -178,7 +178,8 @@ export type EmailDeliveryTrigger =
   | "auto_payment"
   | "auto_kanban"
   | "auto_finalize_rat"
-  | "auto_shipping";
+  | "auto_shipping"
+  | "auto_equipment_received";
 
 export interface EmailDeliveryRecord {
   id: string;
@@ -221,6 +222,8 @@ export interface MaintenanceRequest {
   openingDate: string; // ISO string or simple YYYY-MM-DD
   /** Data em que o equipamento foi recebido na empresa (YYYY-MM-DD). */
   equipmentReceivedDate?: string;
+  /** Imagens anexadas na etapa de solicitação (Firebase Storage). */
+  solicitationAttachments?: Attachment[];
   problemDescription: string;
   initialDiagnostic: string;
 
@@ -238,6 +241,7 @@ export interface MaintenanceRequest {
   ratEmailSentBy?: string;
   paymentConfirmationEmailSentAt?: string;
   maintenanceStartedEmailSentAt?: string;
+  equipmentReceivedEmailSentAt?: string;
   trackingEmailSentAt?: string;
   trackingEmailSentBy?: string;
 

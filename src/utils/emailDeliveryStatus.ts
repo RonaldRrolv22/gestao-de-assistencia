@@ -35,6 +35,7 @@ const TYPE_LABELS: Record<EmailDeliveryType, string> = {
   maintenance_started: "Manutenção",
   rat: "RAT",
   tracking: "Rastreio",
+  equipment_received: "Recebimento",
 };
 
 function legacySentAt(request: MaintenanceRequest, type: EmailDeliveryType): string | undefined {
@@ -45,6 +46,8 @@ function legacySentAt(request: MaintenanceRequest, type: EmailDeliveryType): str
       return request.ratEmailSentAt;
     case "maintenance_started":
       return request.maintenanceStartedEmailSentAt || request.paymentConfirmationEmailSentAt;
+    case "equipment_received":
+      return request.equipmentReceivedEmailSentAt;
     case "tracking":
       return request.trackingEmailSentAt;
   }
@@ -113,5 +116,7 @@ export function isEmailApplicable(request: MaintenanceRequest, type: EmailDelive
       return request.rat?.status === "Finalizado";
     case "tracking":
       return Boolean(request.shippingLabel?.trackingCode);
+    case "equipment_received":
+      return Boolean(request.equipmentReceivedDate);
   }
 }

@@ -44,14 +44,19 @@ export function normalizeRat(rat: RAT | undefined): RAT | undefined {
 export function normalizeMaintenanceRequest(request: MaintenanceRequest): MaintenanceRequest {
   const rat = request.rat ? normalizeRat(request.rat) : undefined;
   const budget = request.budget ? normalizeBudget(request.budget) : undefined;
+  const solicitationAttachments = asArray<Attachment>(request.solicitationAttachments);
 
   if (rat === request.rat && budget === request.budget) {
-    return request;
+    return {
+      ...request,
+      solicitationAttachments,
+    };
   }
 
   return {
     ...request,
     ...(rat !== undefined ? { rat } : {}),
     ...(budget !== undefined ? { budget } : {}),
+    solicitationAttachments,
   };
 }

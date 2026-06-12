@@ -35,6 +35,7 @@ import {
   sendDocumentEmailToClient,
   triggerMaintenanceStartedEmail,
   triggerRatFinalizedEmail,
+  triggerEquipmentReceivedEmail,
   triggerTrackingEmail,
 } from "./src/lib/documentEmailService";
 import {
@@ -345,6 +346,27 @@ MELHOR_ENVIO_ACCESS_TOKEN=${tokens.access_token}</pre>
     } catch (err: unknown) {
       console.error("POST /api/email/tracking:", err);
       const message = err instanceof Error ? err.message : "Erro ao enviar e-mail de rastreio.";
+      return res.status(500).json({ error: "EMAIL_SEND_FAILED", message });
+    }
+  });
+
+  app.post("/api/email/equipment-received", async (req, res) => {
+    try {
+      await verifyAdminToken(req.headers.authorization);
+
+      const { requestId } = req.body as { requestId?: string };
+      if (!requestId) {
+        return res.status(400).json({
+          error: "INVALID_BODY",
+          message: "requestId é obrigatório.",
+        });
+      }
+
+      const result = await triggerEquipmentReceivedEmail(requestId);
+      return res.json(result);
+    } catch (err: unknown) {
+      console.error("POST /api/email/equipment-received:", err);
+      const message = err instanceof Error ? err.message : "Erro ao enviar e-mail de recebimento.";
       return res.status(500).json({ error: "EMAIL_SEND_FAILED", message });
     }
   });

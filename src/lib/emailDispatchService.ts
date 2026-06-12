@@ -27,6 +27,9 @@ import {
   buildMaintenanceStartedEmailHtml,
   buildMaintenanceStartedEmailText,
   buildMaintenanceStartedEmailSubject,
+  buildEquipmentReceivedEmailHtml,
+  buildEquipmentReceivedEmailText,
+  buildEquipmentReceivedEmailSubject,
   buildTrackingEmailHtml,
   buildTrackingEmailText,
   buildTrackingEmailSubject,
@@ -181,6 +184,8 @@ async function dispatchEmail(
           ? request.ratEmailSentAt
           : type === "maintenance_started"
             ? request.maintenanceStartedEmailSentAt || request.paymentConfirmationEmailSentAt
+            : type === "equipment_received"
+              ? request.equipmentReceivedEmailSentAt
             : request.trackingEmailSentAt;
     return {
       success: true,
@@ -292,6 +297,26 @@ export async function dispatchMaintenanceStartedEmail(
   return dispatchEmail(requestId, "maintenance_started", subject, html, text, {
     sentBy: options.sentBy || "Sistema",
     trigger: options.trigger,
+  });
+}
+
+export async function dispatchEquipmentReceivedEmail(
+  requestId: string,
+  options: { trigger: EmailDeliveryTrigger; sentBy?: string; allowResend?: boolean }
+): Promise<DispatchEmailResult> {
+  const request = await loadRequest(requestId);
+  if (!request.equipmentReceivedDate?.trim()) {
+    throw new Error("Data de recebimento não informada nesta O.S.");
+  }
+
+  const subject = buildEquipmentReceivedEmailSubject(request);
+  const html = buildEquipmentReceivedEmailHtml(request);
+  const text = buildEquipmentReceivedEmailText(request);
+
+  return dispatchEmail(requestId, "equipment_received", subject, html, text, {
+    sentBy: options.sentBy || "Sistema",
+    trigger: options.trigger,
+    allowResend: options.allowResend ?? true,
   });
 }
 

@@ -80,6 +80,10 @@ export function triggerRatFinalizedEmail(requestId: string): Promise<TriggerEmai
   return postEmailApi("/api/email/rat-finalized", { requestId });
 }
 
+export function triggerEquipmentReceivedEmail(requestId: string): Promise<TriggerEmailResult> {
+  return postEmailApi("/api/email/equipment-received", { requestId });
+}
+
 export function triggerTrackingEmail(requestId: string): Promise<TriggerEmailResult> {
   return postEmailApi("/api/email/tracking", { requestId });
 }

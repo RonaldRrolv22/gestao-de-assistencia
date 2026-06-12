@@ -184,7 +184,7 @@ function AppShell() {
 
   const handleAddRequest = async (
     newReqData: Omit<MaintenanceRequest, "id" | "requestNumber" | "movementHistory">
-  ) => {
+  ): Promise<MaintenanceRequest | void> => {
     try {
       const initialLog = {
         id: `mov-init-${Date.now()}`,
@@ -221,10 +221,11 @@ function AppShell() {
         await createClient(newClientEntity);
       }
 
-      await createMaintenanceRequest(
+      const created = await createMaintenanceRequest(
         { ...newReqData, clientId: finalClientId },
         initialLog
       );
+      return created;
     } catch (err) {
       console.error(err);
       appNoticeError("Erro ao criar ordem de serviço. Verifique sua conexão e permissões.");

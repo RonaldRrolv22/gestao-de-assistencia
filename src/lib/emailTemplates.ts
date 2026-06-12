@@ -324,6 +324,70 @@ export function buildMaintenanceStartedEmailSubject(request: MaintenanceRequest)
   return `Reparo em andamento — ${emailRatDisplayId(request)} | Neurobots`;
 }
 
+function formatEquipmentReceivedDateLabel(iso?: string): string {
+  if (!iso?.trim()) return "—";
+  const [y, m, d] = iso.trim().split("-");
+  if (y && m && d) return `${d}/${m}/${y}`;
+  try {
+    return new Date(iso).toLocaleDateString("pt-BR");
+  } catch {
+    return iso;
+  }
+}
+
+export function buildEquipmentReceivedEmailSubject(request: MaintenanceRequest): string {
+  return `Equipamento recebido — ${emailOsDisplayId(request)} | Neurobots`;
+}
+
+export function buildEquipmentReceivedEmailHtml(request: MaintenanceRequest): string {
+  const receivedLabel = formatEquipmentReceivedDateLabel(request.equipmentReceivedDate);
+  const serialLabel = request.serialNumber?.trim() || "Não informado";
+
+  const body = `
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
+      Olá, <strong>${escapeHtml(request.clientName)}</strong>!
+    </p>
+    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.6;">
+      Confirmamos o recebimento do seu equipamento em nossa assistência técnica.
+      Ele já está registrado em nosso sistema e seguirá para triagem e diagnóstico.
+    </p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#eff6ff;border-radius:12px;padding:4px 20px;margin-bottom:8px;border:1px solid #bfdbfe;">
+      ${summaryRow("O.S.", escapeHtml(emailOsDisplayId(request)))}
+      ${summaryRow("Nº interno", escapeHtml(request.requestNumber))}
+      ${summaryRow("Equipamento", escapeHtml(request.productName))}
+      ${summaryRow("Número de série", escapeHtml(serialLabel))}
+      ${summaryRow("Recebido em", escapeHtml(receivedLabel))}
+    </table>
+    <p style="margin:16px 0 0;font-size:13px;color:#64748b;line-height:1.6;">
+      Em breve entraremos em contato com o diagnóstico e, se necessário, o orçamento para o reparo.
+      Guarde este e-mail para seus registros.
+    </p>`;
+
+  return emailLayout("Equipamento Recebido", body);
+}
+
+export function buildEquipmentReceivedEmailText(request: MaintenanceRequest): string {
+  const receivedLabel = formatEquipmentReceivedDateLabel(request.equipmentReceivedDate);
+  const serialLabel = request.serialNumber?.trim() || "Não informado";
+
+  return [
+    `Olá, ${request.clientName}!`,
+    "",
+    "Confirmamos o recebimento do seu equipamento em nossa assistência técnica.",
+    "Ele já está registrado em nosso sistema e seguirá para triagem e diagnóstico.",
+    "",
+    `O.S.: ${emailOsDisplayId(request)}`,
+    `Nº interno: ${request.requestNumber}`,
+    `Equipamento: ${request.productName}`,
+    `Número de série: ${serialLabel}`,
+    `Recebido em: ${receivedLabel}`,
+    "",
+    "Em breve entraremos em contato com o diagnóstico e, se necessário, o orçamento para o reparo.",
+    "Guarde este e-mail para seus registros.",
+    emailTextFooter(),
+  ].join("\n");
+}
+
 function emailTextFooter(): string {
   return [
     "",

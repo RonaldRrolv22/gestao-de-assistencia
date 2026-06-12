@@ -13,7 +13,8 @@ import {
   RAT, 
   MovementLog, 
   User,
-  TechnicalProduct
+  TechnicalProduct,
+  Attachment
 } from "../types";
 import { 
   Plus, 
@@ -39,6 +40,11 @@ import { canMoveKanbanCard, getKanbanMoveBlockReason } from "../utils/kanbanMove
 import { appNoticeError, appNoticeSuccess, appNoticeWarning } from "../utils/appNotice";
 import { canMoveToOrcamento, isAdminProfile } from "../services/userRoles";
 import { triggerMaintenanceStartedEmail } from "../services/documentEmailApi";
+import { uploadSolicitationAttachments } from "../services/storageService";
+import { notifyEquipmentReceivedIfDateChanged } from "../utils/equipmentReceivedEmail";
+import SolicitationAttachmentsField, {
+  PendingFile,
+} from "./solicitation/SolicitationAttachmentsField";
 import { verifyCurrentUserPassword } from "../services/authService";
 import { isBudgetRejected, isRejectedVisibleInOrcamento } from "../utils/rejectedBudget";
 import {
@@ -67,7 +73,9 @@ interface KanbanBoardProps {
   productsCatalog: ProductCatalog[];
   technicalProducts: TechnicalProduct[];
   currentUser: User;
-  onAddRequest: (req: Omit<MaintenanceRequest, "id" | "requestNumber" | "movementHistory">) => void;
+  onAddRequest: (
+    req: Omit<MaintenanceRequest, "id" | "requestNumber" | "movementHistory">
+  ) => Promise<MaintenanceRequest | void>;
   onUpdateRequest: (req: MaintenanceRequest) => void;
   onDeleteRequest: (id: string) => void;
   onOpenBudget: (req: MaintenanceRequest, showPdf?: boolean) => void;
@@ -156,6 +164,10 @@ export default function KanbanBoard({
     problemDescription: "",
     initialDiagnostic: ""
   });
+  const [pendingAttachmentFiles, setPendingAttachmentFiles] = useState<PendingFile[]>([]);
+  const [isSavingRequest, setIsSavingRequest] = useState(false);
+  const [editSolicitationAttachments, setEditSolicitationAttachments] = useState<Attachment[]>([]);
+  const [isSavingEditAttachments, setIsSavingEditAttachments] = useState(false);
 
   // Edit simple request details modal state (Column 1 cards editing parameters)
   const [editingRequest, setEditingRequest] = useState<MaintenanceRequest | null>(null);
@@ -166,6 +178,7 @@ export default function KanbanBoard({
       if (initialEditingRequest) {
         setEditedInitialDiagnostic(initialEditingRequest.initialDiagnostic || "");
         setEditedEquipmentReceivedDate(initialEditingRequest.equipmentReceivedDate || "");
+        setEditSolicitationAttachments(initialEditingRequest.solicitationAttachments || []);
       }
     }
   }, [initialEditingRequest]);
@@ -175,6 +188,7 @@ export default function KanbanBoard({
     if (req) {
       setEditedInitialDiagnostic(req.initialDiagnostic || "");
       setEditedEquipmentReceivedDate(req.equipmentReceivedDate || "");
+      setEditSolicitationAttachments(req.solicitationAttachments || []);
     } else {
       onCloseEditingRequest?.();
     }
@@ -221,7 +235,7 @@ export default function KanbanBoard({
   };
 
   // Submit "Nova Solicitação"
-  const handleSaveRequest = (e: React.FormEvent) => {
+  const handleSaveRequest = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedExistingClientId) {
@@ -248,39 +262,60 @@ export default function KanbanBoard({
     }
 
     const receivedDate = equipmentForm.equipmentReceivedDate.trim();
+    const filesToUpload = pendingAttachmentFiles.map((item) => item.file);
 
-    onAddRequest({
-      columnId: "solicitacao",
-      clientId: selectedExistingClientId === "add_new_client" ? `cli-temp-${Date.now()}` : selectedExistingClientId,
-      clientName: clientForm.name.trim(),
-      clientCompany: clientForm.company.trim() || "Particular", // default value if empty
-      clientAddress: clientForm.address.trim(),
-      clientCity: clientForm.city.trim(),
-      clientState: clientForm.state.trim().toUpperCase(),
-      clientPhone: clientForm.phone.trim(),
-      clientEmail: clientForm.email.trim(),
-      clientCpfCnpj: clientForm.cpfCnpj.trim(),
-      clientCep: clientForm.cep.trim(),
-      productName: equipmentForm.productName.trim(),
-      serialNumber: equipmentForm.serialNumber.trim(),
-      invoiceDate: equipmentForm.invoiceDate,
-      openingDate: new Date().toISOString().split("T")[0],
-      ...(receivedDate ? { equipmentReceivedDate: receivedDate } : {}),
-      problemDescription: requestDescForm.problemDescription.trim(),
-      initialDiagnostic: requestDescForm.initialDiagnostic.trim()
-    });
+    setIsSavingRequest(true);
+    try {
+      const created = await onAddRequest({
+        columnId: "solicitacao",
+        clientId: selectedExistingClientId === "add_new_client" ? `cli-temp-${Date.now()}` : selectedExistingClientId,
+        clientName: clientForm.name.trim(),
+        clientCompany: clientForm.company.trim() || "Particular",
+        clientAddress: clientForm.address.trim(),
+        clientCity: clientForm.city.trim(),
+        clientState: clientForm.state.trim().toUpperCase(),
+        clientPhone: clientForm.phone.trim(),
+        clientEmail: clientForm.email.trim(),
+        clientCpfCnpj: clientForm.cpfCnpj.trim(),
+        clientCep: clientForm.cep.trim(),
+        productName: equipmentForm.productName.trim(),
+        serialNumber: equipmentForm.serialNumber.trim(),
+        invoiceDate: equipmentForm.invoiceDate,
+        openingDate: new Date().toISOString().split("T")[0],
+        ...(receivedDate ? { equipmentReceivedDate: receivedDate } : {}),
+        problemDescription: requestDescForm.problemDescription.trim(),
+        initialDiagnostic: requestDescForm.initialDiagnostic.trim(),
+      });
 
-    // Reset forms & close
-    setShowAddModal(false);
-    setSelectedExistingClientId("");
-    setClientForm({ name: "", company: "", address: "", city: "", state: "", phone: "", email: "", cpfCnpj: "", cep: "" });
-    setEquipmentForm({
-      productName: "",
-      serialNumber: "",
-      invoiceDate: "",
-      equipmentReceivedDate: "",
-    });
-    setRequestDescForm({ problemDescription: "", initialDiagnostic: "" });
+      if (!created) return;
+
+      if (filesToUpload.length > 0) {
+        const attachments = await uploadSolicitationAttachments(created.id, filesToUpload);
+        await onUpdateRequest({ ...created, solicitationAttachments: attachments });
+      }
+
+      if (receivedDate) {
+        await notifyEquipmentReceivedIfDateChanged(created.id, undefined, receivedDate);
+      }
+
+      pendingAttachmentFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+      setShowAddModal(false);
+      setSelectedExistingClientId("");
+      setClientForm({ name: "", company: "", address: "", city: "", state: "", phone: "", email: "", cpfCnpj: "", cep: "" });
+      setEquipmentForm({
+        productName: "",
+        serialNumber: "",
+        invoiceDate: "",
+        equipmentReceivedDate: "",
+      });
+      setRequestDescForm({ problemDescription: "", initialDiagnostic: "" });
+      setPendingAttachmentFiles([]);
+      appNoticeSuccess("Solicitação criada com sucesso.");
+    } catch (err) {
+      appNoticeError(err instanceof Error ? err.message : "Erro ao criar ordem de serviço.");
+    } finally {
+      setIsSavingRequest(false);
+    }
   };
 
   // Movement handler integrating logs
@@ -411,6 +446,7 @@ export default function KanbanBoard({
     const card = requests.find((r) => r.id === requestId);
     if (!card || !date.trim()) return;
 
+    const previousDate = card.equipmentReceivedDate;
     const updated: MaintenanceRequest = {
       ...card,
       equipmentReceivedDate: date.trim(),
@@ -422,6 +458,7 @@ export default function KanbanBoard({
         handleSetEditingRequest(updated);
       }
       appNoticeSuccess("Data de recebimento salva.");
+      await notifyEquipmentReceivedIfDateChanged(requestId, previousDate, date.trim());
     } catch (err) {
       appNoticeWarning(err instanceof Error ? err.message : "Falha ao salvar data de recebimento.");
     }
@@ -816,6 +853,23 @@ export default function KanbanBoard({
                 </div>
               </div>
 
+              <div className={ADD_MODAL_SECTION}>
+                <div className={ADD_MODAL_SECTION_TITLE}>
+                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-orange-50 border border-orange-100 text-brand-orange">
+                    <FileSearch className="h-4 w-4" />
+                  </span>
+                  <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                    Anexos da Solicitação (imagens)
+                  </h4>
+                </div>
+                <SolicitationAttachmentsField
+                  variant="create"
+                  pendingFiles={pendingAttachmentFiles}
+                  onPendingFilesChange={setPendingAttachmentFiles}
+                  disabled={isSavingRequest}
+                />
+              </div>
+
               {/* Step 3: problem details */}
               <div className={ADD_MODAL_SECTION}>
                 <div className={ADD_MODAL_SECTION_TITLE}>
@@ -863,9 +917,10 @@ export default function KanbanBoard({
                 <button
                   type="submit"
                   id="btn-save-new-solicitacao-modal"
-                  className="px-5 py-2.5 bg-brand-gradient hover:opacity-95 hover:shadow-md text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer transition-all duration-200"
+                  disabled={isSavingRequest}
+                  className="px-5 py-2.5 bg-brand-gradient hover:opacity-95 hover:shadow-md text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Criar Cartão
+                  {isSavingRequest ? "Criando..." : "Criar Cartão"}
                 </button>
               </div>
 
@@ -949,13 +1004,20 @@ export default function KanbanBoard({
                         type="button"
                         onClick={async () => {
                           if (!editingRequest) return;
+                          const previousDate = editingRequest.equipmentReceivedDate;
+                          const newDate = editedEquipmentReceivedDate.trim() || undefined;
                           const updatedReq = {
                             ...editingRequest,
-                            equipmentReceivedDate: editedEquipmentReceivedDate.trim() || undefined,
+                            equipmentReceivedDate: newDate,
                           };
                           await onUpdateRequest(updatedReq);
                           handleSetEditingRequest(updatedReq);
                           appNoticeSuccess("Data de recebimento salva no banco de dados.");
+                          await notifyEquipmentReceivedIfDateChanged(
+                            editingRequest.id,
+                            previousDate,
+                            newDate
+                          );
                         }}
                         className="px-3 py-2 bg-brand-gradient hover:opacity-90 text-white font-semibold rounded-xl shrink-0 transition-all text-xs shadow-sm"
                       >
@@ -970,6 +1032,32 @@ export default function KanbanBoard({
                   </div>
                 </div>
               </div>
+
+              {editingRequest.columnId === "solicitacao" && (
+                <div className="space-y-3 bg-slate-50/50 p-4 rounded-xl border">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[10px]">
+                    Anexos da Solicitação (imagens)
+                  </h4>
+                  <SolicitationAttachmentsField
+                    variant="edit"
+                    requestId={editingRequest.id}
+                    attachments={editSolicitationAttachments}
+                    onAttachmentsChange={async (attachments) => {
+                      if (!editingRequest) return;
+                      setEditSolicitationAttachments(attachments);
+                      setIsSavingEditAttachments(true);
+                      try {
+                        const updatedReq = { ...editingRequest, solicitationAttachments: attachments };
+                        await onUpdateRequest(updatedReq);
+                        handleSetEditingRequest(updatedReq);
+                      } finally {
+                        setIsSavingEditAttachments(false);
+                      }
+                    }}
+                    disabled={isSavingEditAttachments}
+                  />
+                </div>
+              )}
 
               {/* Syntom details */}
               <div className="space-y-4 bg-slate-50/50 p-4 rounded-xl border">
