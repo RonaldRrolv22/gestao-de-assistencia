@@ -28,8 +28,8 @@ export default function CreditCardPaymentCard({
         <div>
           <h4 className="font-bold text-text-primary text-sm">Cartão de crédito</h4>
           <p className="text-xs text-text-secondary mt-1">
-            Parcelamento até <strong>10x</strong> (mín. {formatCurrency(5)} por parcela). Valores com acréscimo
-            repassado ao cliente.
+            À vista (1x): mesmo valor do PIX. Parcelado: acréscimo repassado conforme parcelas escolhidas no
+            checkout.
           </p>
         </div>
         <ActionButton

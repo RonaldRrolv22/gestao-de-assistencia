@@ -11,7 +11,6 @@ import { sanitizeRequestDocId } from "./requestIds";
 import {
   acceptableCardPaymentCents,
   buildCardInstallmentsWithSurcharge,
-  expectedCardLinkAmountCents,
 } from "../utils/cardSurcharge";
 import { chargeableBudgetTotal } from "../utils/maintenanceAccess";
 import {
@@ -319,7 +318,6 @@ export async function createCardPaymentLink(
   assertChargeableRequest(req, true);
 
   const pixBaseCents = resolveAmountCents(req, options?.amountCents);
-  const cardLinkCents = expectedCardLinkAmountCents(pixBaseCents);
   const existing = req.budgetPayment;
 
   if (
@@ -354,7 +352,7 @@ export async function createCardPaymentLink(
       items: [
         {
           name: `Orçamento O.S. ${req.id}`,
-          amount: cardLinkCents,
+          amount: pixBaseCents,
           default_quantity: 1,
         },
       ],
@@ -382,7 +380,7 @@ export async function createCardPaymentLink(
     pagarmePaymentLinkId: link.id,
     paymentLinkUrl: link.url,
     amountCents: pixBaseCents,
-    cardLinkAmountCents: cardLinkCents,
+    cardLinkAmountCents: pixBaseCents,
     pixAmountCents: existingPayment?.pixAmountCents ?? pixBaseCents,
     pagarmeOrderId: existingPayment?.pagarmeOrderId,
     pagarmeChargeId: existingPayment?.pagarmeChargeId,

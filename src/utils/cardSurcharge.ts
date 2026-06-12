@@ -6,23 +6,17 @@
 const MAX_CARD_INSTALLMENTS = 10;
 const MIN_CENTS_PER_INSTALLMENT = 500;
 
-/** Taxa base (1x) repassada ao cliente no cartão — padrão 3,99%. */
-function baseSurchargeRate(): number {
-  const raw = process.env.CARD_SURCHARGE_1X ?? "0.0399";
-  const parsed = parseFloat(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0.0399;
-}
-
-/** Acréscimo adicional por parcela extra (2x, 3x, …) — padrão 1% por parcela. */
+/** Acréscimo por parcela extra (2x, 3x, …) — padrão 1% por parcela adicional. */
 function perInstallmentSurchargeRate(): number {
   const raw = process.env.CARD_SURCHARGE_PER_INSTALLMENT ?? "0.01";
   const parsed = parseFloat(raw);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0.01;
 }
 
+/** À vista (1x) = 0. A partir de 2x, repassa acréscimo ao cliente. */
 export function surchargeRateForInstallments(installments: number): number {
-  const extra = Math.max(0, installments - 1);
-  return baseSurchargeRate() + extra * perInstallmentSurchargeRate();
+  if (installments <= 1) return 0;
+  return (installments - 1) * perInstallmentSurchargeRate();
 }
 
 export function cardTotalCentsForInstallments(pixBaseCents: number, installments: number): number {
@@ -41,7 +35,7 @@ function maxInstallmentsForAmount(amountCents: number): number {
   return 1;
 }
 
-/** Parcelas com acréscimo repassado ao cliente (valor total por opção de parcelamento). */
+/** Parcelas: 1x sem acréscimo; 2x+ com acréscimo progressivo. */
 export function buildCardInstallmentsWithSurcharge(
   pixBaseCents: number
 ): { number: number; total: number }[] {
@@ -53,14 +47,19 @@ export function buildCardInstallmentsWithSurcharge(
   return installments;
 }
 
-/** Valor máximo do link de cartão (maior total entre as parcelas disponíveis). */
+/** Valor do carrinho no link Pagar.me (sempre o valor base, sem taxa). */
 export function expectedCardLinkAmountCents(pixBaseCents: number): number {
+  return pixBaseCents;
+}
+
+/** Maior total parcelado (só para aviso na UI). */
+export function maxCardInstallmentTotalCents(pixBaseCents: number): number {
   const installments = buildCardInstallmentsWithSurcharge(pixBaseCents);
   if (installments.length === 0) return pixBaseCents;
   return Math.max(...installments.map((i) => i.total));
 }
 
-/** Todos os valores aceitáveis em confirmação de pagamento via cartão. */
+/** Valores aceitos na confirmação de pagamento via cartão. */
 export function acceptableCardPaymentCents(pixBaseCents: number): number[] {
-  return buildCardInstallmentsWithSurcharge(pixBaseCents).map((i) => i.total);
+  return [...new Set(buildCardInstallmentsWithSurcharge(pixBaseCents).map((i) => i.total))];
 }

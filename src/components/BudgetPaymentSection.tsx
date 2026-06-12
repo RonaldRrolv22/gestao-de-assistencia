@@ -16,7 +16,7 @@ import {
 } from "../services/pagarmeApi";
 import { CheckCircle2 } from "lucide-react";
 import PaymentPanel from "./payment/PaymentPanel";
-import { expectedCardLinkAmountCents } from "../utils/cardSurcharge";
+import { expectedCardLinkAmountCents, maxCardInstallmentTotalCents } from "../utils/cardSurcharge";
 import { isCardLinkSynced, isPixStillValid, mergeBudgetPaymentSnapshot } from "../utils/budgetPaymentSync";
 
 interface BudgetPaymentSectionProps {
@@ -161,6 +161,7 @@ export default function BudgetPaymentSection({
   const cardLinkAmountCents = payment?.cardLinkAmountCents ?? 0;
   const liveAmountCents = Math.round(totalFinal * 100);
   const expectedCardCents = expectedCardLinkAmountCents(liveAmountCents);
+  const maxParceladoCents = maxCardInstallmentTotalCents(liveAmountCents);
   const pixAmountMismatch =
     !compact &&
     (!request.budget?.isWarranty || pixOnly) &&
@@ -256,6 +257,7 @@ export default function BudgetPaymentSection({
       compact={compact}
       pixOnly={pixOnly}
       expectedCardCents={expectedCardCents}
+      maxParceladoCents={maxParceladoCents}
       publicToken={!!publicToken}
       error={displayError}
       message={message}

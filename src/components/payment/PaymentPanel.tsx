@@ -26,6 +26,7 @@ interface PaymentPanelProps {
   compact?: boolean;
   pixOnly?: boolean;
   expectedCardCents?: number;
+  maxParceladoCents?: number;
   publicToken?: boolean;
   error: string | null;
   message: string | null;
@@ -55,6 +56,7 @@ export default function PaymentPanel({
   payment,
   pixOnly = false,
   expectedCardCents = 0,
+  maxParceladoCents = 0,
   error,
   message,
   syncingPix,
@@ -150,10 +152,10 @@ export default function PaymentPanel({
           </div>
         )}
 
-        {!pixOnly && expectedCardCents > Math.round(totalFinal * 100) && (
+        {!pixOnly && maxParceladoCents > Math.round(totalFinal * 100) && (
           <p className="text-[11px] text-slate-600 leading-relaxed">
-            No cartão, o valor inclui acréscimos de parcelamento (até{" "}
-            {formatCurrency(expectedCardCents / 100)} em 10x). PIX permanece em {formatCurrency(totalFinal)}.
+            Cartão à vista (1x): mesmo valor do PIX ({formatCurrency(totalFinal)}). Parcelado: acréscimo
+            progressivo (até {formatCurrency(maxParceladoCents / 100)} em 10x no checkout Pagar.me).
           </p>
         )}
 
