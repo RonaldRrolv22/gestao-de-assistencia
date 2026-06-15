@@ -22,7 +22,7 @@ export default function AppTopBar({
   const firstName = currentUser.name.trim().split(/\s+/)[0] || currentUser.name;
 
   return (
-    <header className="shrink-0 bg-card/95 backdrop-blur-md border-b border-border/60">
+    <header className="relative z-30 shrink-0 bg-card/95 backdrop-blur-md border-b border-border/60">
       <div className="flex items-center gap-4 px-6 lg:px-8 py-3 min-w-0">
         <BrandLogo size="header" showText={false} flush />
         <div className="min-w-0 pl-4 border-l border-slate-200/90">
