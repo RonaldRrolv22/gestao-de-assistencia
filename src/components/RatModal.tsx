@@ -72,6 +72,7 @@ interface RatModalProps {
   onOpenHubTestes?: () => void | Promise<void>;
   onClose: () => void;
   canEdit: boolean; // false for non-admins if in finalized, or based on permissions
+  canRelease: boolean;
   readOnly?: boolean;
   initialShowPdf?: boolean;
   currentUser: { name: string; email: string; profile: string };
@@ -91,6 +92,7 @@ export default function RatModal({
   onOpenHubTestes,
   onClose,
   canEdit,
+  canRelease,
   readOnly = false,
   initialShowPdf = false,
   currentUser,
@@ -980,7 +982,7 @@ export default function RatModal({
                 <span>{exportingPdf ? "Gerando PDF..." : "Baixar PDF da RAT"}</span>
               </button>
 
-              {isFinalizado && !isClosed && (
+              {isFinalizado && !isClosed && canRelease && (
                 <>
                   <button
                     type="button"

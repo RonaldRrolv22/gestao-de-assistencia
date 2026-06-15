@@ -52,6 +52,11 @@ export function canEditRat(profile: string): boolean {
   return isAdminProfile(profile) || isTechnicianProfile(profile);
 }
 
+/** Liberação do equipamento e coluna Liberado: somente Administrador. */
+export function canReleaseEquipment(profile: string): boolean {
+  return isAdminProfile(profile);
+}
+
 /** Clientes — cadastrar e editar: Usuário e Administrador. */
 export function canManageClients(profile: string): boolean {
   return isAdminProfile(profile) || isUsuarioProfile(profile);

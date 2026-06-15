@@ -4,14 +4,42 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { AppNotification } from "../types";
+import { AppNotification, AppNotificationType } from "../types";
 import { formatCurrency } from "../utils";
 import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../services/firestoreService";
-import { Bell, CheckCheck, Wrench, X } from "lucide-react";
+import {
+  Bell,
+  CheckCheck,
+  CheckCircle2,
+  ClipboardList,
+  CreditCard,
+  FilePlus,
+  Wrench,
+  X,
+} from "lucide-react";
 import StatusBadge from "./ui/StatusBadge";
+
+function notificationIcon(type: AppNotificationType) {
+  switch (type) {
+    case "request_created":
+      return FilePlus;
+    case "moved_to_orcamento":
+      return ClipboardList;
+    case "moved_to_manutencao":
+      return Wrench;
+    case "payment_approved":
+      return CreditCard;
+    case "rat_finalized":
+      return ClipboardList;
+    case "moved_to_liberado":
+      return CheckCircle2;
+    default:
+      return Bell;
+  }
+}
 
 interface NotificationCenterProps {
   notifications: AppNotification[];
@@ -116,6 +144,7 @@ export default function NotificationCenter({
             ) : (
               notifications.map((n) => {
                 const isUnread = !n.readBy?.includes(currentUserId);
+                const Icon = notificationIcon(n.type);
                 return (
                   <button
                     key={n.id}
@@ -131,7 +160,7 @@ export default function NotificationCenter({
                           isUnread ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
                         }`}
                       >
-                        <Wrench className="h-4 w-4" />
+                        <Icon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -140,7 +169,9 @@ export default function NotificationCenter({
                         </div>
                         <p className="text-[11px] text-text-secondary mt-1 leading-relaxed">{n.message}</p>
                         <p className="text-[10px] text-text-secondary/80 mt-1.5">
-                          {n.clientName} • {formatCurrency(n.totalFinal)} •{" "}
+                          {n.clientName}
+                          {n.totalFinal > 0 ? ` • ${formatCurrency(n.totalFinal)}` : ""}
+                          {" • "}
                           {new Date(n.createdAt).toLocaleString("pt-BR")}
                         </p>
                       </div>

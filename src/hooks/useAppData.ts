@@ -12,6 +12,7 @@ import {
   TechnicalProduct,
   MaintenanceRequest,
   AppNotification,
+  UserRole,
 } from "../types";
 import {
   subscribeToUsers,
@@ -22,8 +23,9 @@ import {
   subscribeToRequests,
   subscribeToNotifications,
 } from "../services/firestoreService";
+import { normalizeUserRole } from "../services/userRoles";
 
-export function useAppData(enabled: boolean) {
+export function useAppData(enabled: boolean, userProfile: UserRole | null) {
   const [users, setUsers] = useState<User[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [productsCatalog, setProductsCatalog] = useState<ProductCatalog[]>([]);
@@ -34,8 +36,9 @@ export function useAppData(enabled: boolean) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !userProfile) {
       setLoading(false);
+      setNotifications([]);
       return;
     }
 
@@ -46,6 +49,8 @@ export function useAppData(enabled: boolean) {
       if (loadedCount >= 7) setLoading(false);
     };
 
+    const profile = normalizeUserRole(userProfile);
+
     const unsubs = [
       subscribeToUsers((data) => { setUsers(data); markLoaded(); }),
       subscribeToClients((data) => { setClients(data); markLoaded(); }),
@@ -53,11 +58,11 @@ export function useAppData(enabled: boolean) {
       subscribeToServices((data) => { setServicesCatalog(data); markLoaded(); }),
       subscribeToTechnicalProducts((data) => { setTechnicalProducts(data); markLoaded(); }),
       subscribeToRequests((data) => { setRequests(data); markLoaded(); }),
-      subscribeToNotifications((data) => { setNotifications(data); markLoaded(); }),
+      subscribeToNotifications(profile, (data) => { setNotifications(data); markLoaded(); }),
     ];
 
     return () => unsubs.forEach((u) => u());
-  }, [enabled]);
+  }, [enabled, userProfile]);
 
   return {
     users,

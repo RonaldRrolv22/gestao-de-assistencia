@@ -254,7 +254,13 @@ export interface MaintenanceRequest {
   movementHistory: MovementLog[];
 }
 
-export type AppNotificationType = "payment_approved";
+export type AppNotificationType =
+  | "request_created"
+  | "moved_to_orcamento"
+  | "moved_to_manutencao"
+  | "payment_approved"
+  | "rat_finalized"
+  | "moved_to_liberado";
 
 export interface AppNotification {
   id: string;
@@ -268,4 +274,6 @@ export interface AppNotification {
   message: string;
   createdAt: string;
   readBy: string[];
+  targetRoles: UserRole[];
+  actorName?: string;
 }

@@ -39,6 +39,7 @@ import { formatRequestDisplayId } from "../services/requestIds";
 import { canMoveKanbanCard, getKanbanMoveBlockReason } from "../utils/kanbanMovement";
 import { appNoticeError, appNoticeSuccess, appNoticeWarning } from "../utils/appNotice";
 import { canMoveToOrcamento, isAdminProfile } from "../services/userRoles";
+import { createWorkflowNotification } from "../services/workflowNotifications";
 import { triggerMaintenanceStartedEmail } from "../services/documentEmailApi";
 import { uploadSolicitationAttachments } from "../services/storageService";
 import { notifyEquipmentReceivedIfDateChanged } from "../utils/equipmentReceivedEmail";
@@ -325,13 +326,13 @@ export default function KanbanBoard({
 
     if (card.columnId === toCol) return;
 
-    const blockReason = getKanbanMoveBlockReason(card.columnId, toCol, card);
+    const blockReason = getKanbanMoveBlockReason(card.columnId, toCol, card, currentUser.profile);
     if (blockReason) {
       appNoticeWarning(blockReason);
       return;
     }
 
-    if (!canMoveKanbanCard(card.columnId, toCol, card)) {
+    if (!canMoveKanbanCard(card.columnId, toCol, card, currentUser.profile)) {
       return;
     }
 
@@ -384,6 +385,26 @@ export default function KanbanBoard({
 
     await onUpdateRequest(updated);
 
+    try {
+      if (toCol === "orcamento") {
+        await createWorkflowNotification({
+          type: "moved_to_orcamento",
+          request: updated,
+          targetRoles: ["Usuário"],
+          actorName: currentUser.name,
+        });
+      } else if (toCol === "manutencao") {
+        await createWorkflowNotification({
+          type: "moved_to_manutencao",
+          request: updated,
+          targetRoles: ["Técnico"],
+          actorName: currentUser.name,
+        });
+      }
+    } catch (err) {
+      console.warn("Falha ao criar notificação de movimento:", err);
+    }
+
     if (toCol === "manutencao") {
       try {
         const emailResult = await triggerMaintenanceStartedEmail(reqId);
@@ -410,7 +431,7 @@ export default function KanbanBoard({
     const id = draggedCardId;
     if (id) {
       const card = requests.find((r) => r.id === id);
-      if (card && !canMoveKanbanCard(card.columnId, targetColumnId, card)) {
+      if (card && !canMoveKanbanCard(card.columnId, targetColumnId, card, currentUser.profile)) {
         e.dataTransfer.dropEffect = "none";
         return;
       }

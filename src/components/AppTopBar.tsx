@@ -5,13 +5,21 @@
 
 import React from "react";
 import BrandLogo from "./ui/BrandLogo";
+import NotificationCenter from "./NotificationCenter";
+import { AppNotification, User } from "../types";
 
 interface AppTopBarProps {
-  currentUserName: string;
+  currentUser: User;
+  notifications: AppNotification[];
+  onNavigateToRequest?: (requestId: string) => void;
 }
 
-export default function AppTopBar({ currentUserName }: AppTopBarProps) {
-  const firstName = currentUserName.trim().split(/\s+/)[0] || currentUserName;
+export default function AppTopBar({
+  currentUser,
+  notifications,
+  onNavigateToRequest,
+}: AppTopBarProps) {
+  const firstName = currentUser.name.trim().split(/\s+/)[0] || currentUser.name;
 
   return (
     <header className="shrink-0 bg-card/95 backdrop-blur-md border-b border-border/60">
@@ -22,6 +30,14 @@ export default function AppTopBar({ currentUserName }: AppTopBarProps) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mt-0.5 truncate">
             Olá, {firstName}.
           </p>
+        </div>
+        <div className="ml-auto shrink-0">
+          <NotificationCenter
+            notifications={notifications}
+            currentUserId={currentUser.id}
+            onNavigateToRequest={onNavigateToRequest}
+            compact
+          />
         </div>
       </div>
     </header>

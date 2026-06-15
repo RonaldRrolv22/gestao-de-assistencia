@@ -63,7 +63,8 @@ import PublicPaymentPage from "./pages/PublicPaymentPage";
 import AppTopBar from "./components/AppTopBar";
 import { usePaymentPolling } from "./hooks/usePaymentPolling";
 import { Loader2 } from "lucide-react";
-import { isAdminProfile, PROTECTED_USER_EMAILS, canEditBudget, canEditRat, canAccessHubTestes } from "./services/userRoles";
+import { isAdminProfile, PROTECTED_USER_EMAILS, canEditBudget, canEditRat, canAccessHubTestes, canReleaseEquipment } from "./services/userRoles";
+import { createWorkflowNotification } from "./services/workflowNotifications";
 
 export default function App() {
   const publicPathMatch =
@@ -89,7 +90,7 @@ function AppShell() {
     requests,
     notifications,
     loading: dataLoading,
-  } = useAppData(!!currentUser);
+  } = useAppData(!!currentUser, currentUser?.profile ?? null);
 
   usePaymentPolling(requests, !!currentUser);
 
@@ -225,6 +226,18 @@ function AppShell() {
         { ...newReqData, clientId: finalClientId },
         initialLog
       );
+
+      try {
+        await createWorkflowNotification({
+          type: "request_created",
+          request: created,
+          targetRoles: ["Administrador"],
+          actorName: currentUser?.name,
+        });
+      } catch (err) {
+        console.warn("Falha ao criar notificação de nova solicitação:", err);
+      }
+
       return created;
     } catch (err) {
       console.error(err);
@@ -301,6 +314,17 @@ function AppShell() {
     await handleUpdateRequest(updated);
 
     try {
+      await createWorkflowNotification({
+        type: "moved_to_manutencao",
+        request: updated,
+        targetRoles: ["Técnico"],
+        actorName: currentUser?.name,
+      });
+    } catch (err) {
+      console.warn("Falha ao criar notificação de manutenção:", err);
+    }
+
+    try {
       const emailResult = await triggerMaintenanceStartedEmail(requestId);
       if (emailResult.skipped) {
         appNoticeWarning("E-mail de manutenção já havia sido enviado anteriormente.");
@@ -365,6 +389,17 @@ function AppShell() {
 
     if (activeRatReq && activeRatReq.id === requestId) {
       setActiveRatReq(updated);
+    }
+
+    try {
+      await createWorkflowNotification({
+        type: "rat_finalized",
+        request: updated,
+        targetRoles: ["Administrador"],
+        actorName: currentUser?.name,
+      });
+    } catch (err) {
+      console.warn("Falha ao criar notificação de RAT finalizada:", err);
     }
 
     try {
@@ -482,8 +517,18 @@ function AppShell() {
   };
 
   const handleReleaseRequest = async (requestId: string, payment?: PaymentProof) => {
+    if (!currentUser || !canReleaseEquipment(currentUser.profile)) {
+      appNoticeWarning("Somente Administradores podem liberar equipamentos.");
+      return;
+    }
+
     const req = requests.find((r) => r.id === requestId);
     if (!req) return;
+
+    if (req.rat?.status !== "Finalizado") {
+      appNoticeWarning("Finalize a RAT antes de liberar o equipamento.");
+      return;
+    }
 
     const log = {
       id: `mov-${Date.now()}`,
@@ -506,6 +551,17 @@ function AppShell() {
     }
 
     await handleUpdateRequest(updated);
+
+    try {
+      await createWorkflowNotification({
+        type: "moved_to_liberado",
+        request: updated,
+        targetRoles: ["Usuário"],
+        actorName: currentUser.name,
+      });
+    } catch (err) {
+      console.warn("Falha ao criar notificação de liberação:", err);
+    }
   };
 
   const handleAddService = async (srv: Omit<ServiceCatalog, "id">) => {
@@ -614,6 +670,7 @@ function AppShell() {
   const userCanEditBudget = canEditBudget(profile);
   const userCanEditRat = canEditRat(profile);
   const userCanOpenHub = canAccessHubTestes(profile);
+  const userCanRelease = canReleaseEquipment(profile);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg font-sans">
@@ -626,7 +683,11 @@ function AppShell() {
       />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-        <AppTopBar currentUserName={currentUser.name} />
+        <AppTopBar
+          currentUser={currentUser}
+          notifications={notifications}
+          onNavigateToRequest={handleNavigateToRequest}
+        />
 
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {activeTab === "kanban" && (
@@ -793,6 +854,7 @@ function AppShell() {
               setRatReadOnly(false);
             }}
             canEdit={userCanEditRat && !ratReadOnly}
+            canRelease={userCanRelease}
             readOnly={ratReadOnly}
             initialShowPdf={activeRatShowPdf}
             currentUser={currentUser}

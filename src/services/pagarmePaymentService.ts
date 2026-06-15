@@ -396,6 +396,7 @@ export async function createCardPaymentLink(
 async function createPaymentApprovedNotification(req: RequestDoc, paidAt: string): Promise<void> {
   const notifId = `pay-${sanitizeRequestDocId(req.id)}-${Date.now()}`;
   const totalFinal = effectiveBudgetTotal(req.budget);
+  const os = req.requestNumber || req.id;
 
   await getAdminDb().collection("notifications").doc(notifId).set({
     id: notifId,
@@ -405,10 +406,33 @@ async function createPaymentApprovedNotification(req: RequestDoc, paidAt: string
     clientName: req.clientName,
     productName: req.productName,
     totalFinal,
-    title: `Pagamento aprovado — ${req.id}`,
-    message: `O pagamento da O.S. ${req.id} (${req.productName}) foi confirmado. Inicie a manutenção do equipamento.`,
+    title: `Pagamento aprovado — ${os}`,
+    message: `O pagamento da O.S. ${os} (${req.productName}) foi confirmado. O equipamento seguiu para manutenção.`,
     createdAt: paidAt,
     readBy: [],
+    targetRoles: ["Usuário"],
+  });
+}
+
+async function createMovedToManutencaoNotification(req: RequestDoc, paidAt: string): Promise<void> {
+  const notifId = `wf-moved_to_manutencao-${sanitizeRequestDocId(req.id)}-${Date.now()}`;
+  const os = req.requestNumber || req.id;
+  const totalFinal = effectiveBudgetTotal(req.budget);
+
+  await getAdminDb().collection("notifications").doc(notifId).set({
+    id: notifId,
+    type: "moved_to_manutencao",
+    requestId: req.id,
+    requestNumber: req.requestNumber,
+    clientName: req.clientName,
+    productName: req.productName,
+    totalFinal,
+    title: `Manutenção iniciada — ${os}`,
+    message: `A O.S. ${os} (${req.productName}) está na baia de Manutenção. Inicie o atendimento técnico.`,
+    createdAt: paidAt,
+    readBy: [],
+    targetRoles: ["Técnico"],
+    actorName: "Pagar.me",
   });
 }
 
@@ -472,6 +496,7 @@ async function markRequestPaid(docId: string, req: RequestDoc): Promise<RequestD
   );
 
   await createPaymentApprovedNotification(updated, paidAt);
+  await createMovedToManutencaoNotification(updated, paidAt);
   await notifyMaintenanceStartedEmail(updated);
 
   return updated;

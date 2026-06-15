@@ -27,6 +27,7 @@ import {
   TechnicalProduct,
   MaintenanceRequest,
   AppNotification,
+  UserRole,
 } from "../types";
 import {
   sanitizeRequestDocId,
@@ -101,14 +102,26 @@ export function subscribeToRequests(
 }
 
 export function subscribeToNotifications(
+  userProfile: UserRole,
   callback: (notifications: AppNotification[]) => void
 ): Unsubscribe {
-  return onSnapshot(collection(db, COLLECTIONS.notifications), (snapshot) => {
+  const q = query(
+    collection(db, COLLECTIONS.notifications),
+    where("targetRoles", "array-contains", userProfile)
+  );
+  return onSnapshot(q, (snapshot) => {
     const notifications = snapshot.docs
       .map((d) => mapSnapshot<AppNotification>(d))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     callback(notifications);
   });
+}
+
+export async function createNotification(notification: AppNotification): Promise<void> {
+  await setDoc(
+    doc(db, COLLECTIONS.notifications, notification.id),
+    stripUndefinedDeep(notification)
+  );
 }
 
 export async function markNotificationRead(notificationId: string, userId: string): Promise<void> {

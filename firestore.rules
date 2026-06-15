@@ -67,5 +67,14 @@ service cloud.firestore {
       allow read: if isAuth();
       allow write: if isAuth();
     }
+
+    match /notifications/{id} {
+      allow read: if isAuth() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profile
+          in resource.data.targetRoles;
+      allow create: if isAuth();
+      allow update: if isAuth() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
+    }
   }
 }
