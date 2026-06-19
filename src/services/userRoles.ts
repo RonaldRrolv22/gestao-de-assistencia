@@ -54,7 +54,7 @@ export function canDraftBudget(profile: string): boolean {
 }
 
 export function canMoveToOrcamento(profile: string): boolean {
-  return canManageBudgetCommercial(profile);
+  return canDraftBudget(profile);
 }
 
 /** RAT — editar e finalizar: Técnico e Administrador. */

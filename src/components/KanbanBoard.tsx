@@ -339,9 +339,9 @@ export default function KanbanBoard({
       return;
     }
 
-    // Movement restriction check for non-admins if entering budget table editing
+    // Movement restriction: perfis sem permissão de rascunho/comercial não entram em Orçamento
     if (toCol === "orcamento" && !canMoveToOrcamento(currentUser.profile)) {
-      appNoticeWarning("Seu perfil não possui autorização para tabular e editar Orçamentos.");
+      appNoticeWarning("Seu perfil não possui autorização para montar orçamentos.");
       return;
     }
 
