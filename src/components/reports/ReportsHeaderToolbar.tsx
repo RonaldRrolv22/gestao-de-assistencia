@@ -21,6 +21,8 @@ interface ReportsHeaderToolbarProps {
   onDownloadPdf: () => void;
   exportingPdf: boolean;
   compact?: boolean;
+  /** Uma linha horizontal para o cabeçalho fixo do app */
+  header?: boolean;
 }
 
 export default function ReportsHeaderToolbar({
@@ -30,7 +32,67 @@ export default function ReportsHeaderToolbar({
   onDownloadPdf,
   exportingPdf,
   compact = false,
+  header = false,
 }: ReportsHeaderToolbarProps) {
+  const periodFilter = (
+    <div className="flex items-center gap-1.5 glass-toolbar rounded-xl p-0.5 sm:p-1 overflow-x-auto report-chart-scroll shrink-0">
+      <Calendar className="h-3.5 w-3.5 text-brand-orange shrink-0 ml-0.5 hidden sm:block" />
+      <div className="flex items-center gap-0.5 min-w-0">
+        {PERIOD_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onTimeFilterChange(opt.value)}
+            aria-pressed={timeFilter === opt.value}
+            className={`report-period-pill ${timeFilter === opt.value ? "report-period-pill-active" : ""}`}
+            id={opt.value === "all" ? "time-filter-select" : undefined}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const exportButtons = (
+    <>
+      <ActionButton
+        variant="secondary"
+        size="sm"
+        icon={<FileSpreadsheet className="h-3.5 w-3.5 text-brand-orange" />}
+        onClick={onExportCsv}
+        className="shrink-0"
+      >
+        <span className="hidden sm:inline">Exportar XLS</span>
+        <span className="sm:hidden">XLS</span>
+      </ActionButton>
+      <ActionButton
+        variant="primary"
+        size="sm"
+        loading={exportingPdf}
+        icon={<FileDown className="h-3.5 w-3.5" />}
+        onClick={onDownloadPdf}
+        className="shrink-0"
+      >
+        {exportingPdf ? "PDF..." : (
+          <>
+            <span className="hidden sm:inline">Baixar PDF</span>
+            <span className="sm:hidden">PDF</span>
+          </>
+        )}
+      </ActionButton>
+    </>
+  );
+
+  if (header) {
+    return (
+      <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+        {periodFilter}
+        {exportButtons}
+      </div>
+    );
+  }
+
   if (compact) {
     return (
       <div className="flex flex-col gap-2 w-full lg:flex-row lg:items-center lg:justify-end lg:gap-3">

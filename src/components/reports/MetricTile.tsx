@@ -68,7 +68,7 @@ export default function MetricTile({
           data={sparklineData}
           strokeColor={styles.sparkStroke}
           fillColor={styles.sparkFill}
-          className="hidden sm:block"
+          className="hidden sm:block w-[72px] h-8 opacity-80"
         />
       )}
     </div>

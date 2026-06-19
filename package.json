@@ -11,7 +11,9 @@
     "lint": "tsc --noEmit",
     "seed": "tsx scripts/seedFirestore.ts",
     "sync-users": "tsx scripts/syncAuthUsers.ts",
-    "cleanup-demo": "tsx scripts/cleanupDemoData.ts"
+    "cleanup-demo": "tsx scripts/cleanupDemoData.ts",
+    "cleanup-all-data": "tsx scripts/clearAllDataExceptUsers.ts",
+    "seed-catalog": "tsx scripts/seedCatalogOnly.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

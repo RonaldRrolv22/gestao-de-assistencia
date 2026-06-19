@@ -15,7 +15,12 @@ interface HelpManualModalProps {
 
 export default function HelpManualModal({ onClose }: HelpManualModalProps) {
   return (
-    <ModalShell onClose={onClose} maxWidth="5xl" className="w-[min(96vw,1200px)] h-[92vh]">
+    <ModalShell
+      onClose={onClose}
+      maxWidth="5xl"
+      zIndex="z-[60]"
+      className="w-[min(96vw,1200px)] h-[min(82vh,calc(100vh-4rem))]"
+    >
       <div className="flex flex-col h-full min-h-0">
         <div className="shrink-0 px-4 sm:px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 pr-14">
           <div className="min-w-0">

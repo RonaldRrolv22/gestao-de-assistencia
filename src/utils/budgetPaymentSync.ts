@@ -130,12 +130,10 @@ export function mergeBudgetPaymentSnapshot(
     amountCents: liveAmountCents,
     publicToken: remote.publicToken || prev.publicToken,
     status:
-      remote.status === "paid"
+      prev.status === "paid"
         ? "paid"
-        : prev.status === "paid"
-          ? "paid"
-          : remote.status === "pending"
-            ? "pending"
-            : prev.status,
+        : remote.status === "pending"
+          ? "pending"
+          : prev.status,
   };
 }

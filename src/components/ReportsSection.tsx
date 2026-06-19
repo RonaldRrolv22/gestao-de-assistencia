@@ -10,11 +10,14 @@ import { formatCurrency, exportToCSV } from "../utils";
 import { downloadHtmlAsPdf } from "../utils/pdfExport";
 import ReportsHeaderToolbar from "./reports/ReportsHeaderToolbar";
 import PageHeader from "./ui/PageHeader";
+import { useHeaderToolbar } from "../context/HeaderToolbarContext";
 import ReportsMetricStrip from "./reports/ReportsMetricStrip";
 import EfficiencyPanel from "./reports/EfficiencyPanel";
 import ColumnSummaryPanel from "./reports/ColumnSummaryPanel";
 import OperationalLineChart from "./reports/OperationalLineChart";
-import EquipmentDoughnutChart from "./reports/EquipmentDoughnutChart";
+import EquipmentDoughnutChart, {
+  EQUIPMENT_DOUGHNUT_CIRCUMFERENCE,
+} from "./reports/EquipmentDoughnutChart";
 import ServiceTimeBarsChart from "./reports/ServiceTimeBarsChart";
 import { appNoticeError } from "../utils/appNotice";
 import { DONUT_WARM_PALETTE } from "./reports/reportsPalette";
@@ -37,6 +40,7 @@ interface ReportsSectionProps {
 export default function ReportsSection({ requests, products, onNavigateToKanban }: ReportsSectionProps) {
   const [timeFilter, setTimeFilter] = React.useState<ReportTimeFilter>("all");
   const [exportingPdf, setExportingPdf] = React.useState(false);
+  const { setToolbar } = useHeaderToolbar();
 
   const filteredRequests = React.useMemo(
     () => filterRequestsByReportTime(requests, timeFilter),
@@ -119,17 +123,18 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
   const doughnutSegments = React.useMemo(() => {
     let accumulatedPercent = 0;
     const colors = DONUT_WARM_PALETTE;
+    const circumference = EQUIPMENT_DOUGHNUT_CIRCUMFERENCE;
     return sortedEquipments.map(([name, count], index) => {
       const percentage = totalEquipmentRepairs > 0 ? (count / totalEquipmentRepairs) * 100 : 0;
       const strokePercent = percentage;
-      const strokeOffset = (accumulatedPercent / 100) * 314.16;
+      const strokeOffset = (accumulatedPercent / 100) * circumference;
       accumulatedPercent += percentage;
       return {
         name,
         count,
         percent: percentage.toFixed(1),
         color: colors[index % colors.length],
-        strokeDash: `${(strokePercent / 100) * 314.16} 314.16`,
+        strokeDash: `${(strokePercent / 100) * circumference} ${circumference}`,
         strokeOffset: -strokeOffset,
       };
     });
@@ -595,26 +600,31 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
     }
   };
 
+  React.useEffect(() => {
+    setToolbar(
+      <ReportsHeaderToolbar
+        header
+        timeFilter={timeFilter}
+        onTimeFilterChange={setTimeFilter}
+        onExportCsv={handleExportCSV}
+        onDownloadPdf={handleDownloadReportPdf}
+        exportingPdf={exportingPdf}
+      />
+    );
+    return () => setToolbar(null);
+  }, [timeFilter, exportingPdf, requests, products, setToolbar]);
+
   return (
     <div
       id="reports-section-viewport"
       className="app-tab-scroll printable-area reports-page reports-exec"
     >
-      <div className="max-w-[1440px] mx-auto w-full px-4 lg:px-6 py-4 lg:py-5 space-y-5">
+      <div className="w-full px-6 lg:px-8 py-4 lg:py-5 space-y-5">
         <PageHeader
           variant="page"
           title="Relatórios & Métricas"
           subtitle={`Acompanhamento operacional, financeiro e controle de garantias · ${REPORT_TIME_FILTER_LABELS[timeFilter]} (${filteredRequests.length} O.S.)`}
-        >
-          <ReportsHeaderToolbar
-            compact
-            timeFilter={timeFilter}
-            onTimeFilterChange={setTimeFilter}
-            onExportCsv={handleExportCSV}
-            onDownloadPdf={handleDownloadReportPdf}
-            exportingPdf={exportingPdf}
-          />
-        </PageHeader>
+        />
 
         <ReportsMetricStrip
           filterKey={timeFilter}
@@ -629,6 +639,15 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
               hintWarm: true,
             },
             {
+              label: "Garantias concedidas",
+              value: formatCurrency(totalWarrantyValue),
+              icon: <ShieldCheck className="h-4 w-4" strokeWidth={2.25} />,
+              variant: "warranty",
+              sparklineData: kpiSparklines.warranty,
+              hint: `Recorrência: ${recurrenceRate}`,
+              hintAlert: true,
+            },
+            {
               label: "Manutenções realizadas",
               value: totalReleased,
               icon: <CheckCircle className="h-4 w-4" strokeWidth={2.25} />,
@@ -637,21 +656,12 @@ export default function ReportsSection({ requests, products, onNavigateToKanban 
               hint: `${totalInMaintenance} em andamento`,
             },
             {
-              label: "Tempo médio resolução",
+              label: "Tempo médio de Resolução",
               value: countReleasedForAvg > 0 ? `${avgDaysFormatted} dias` : "—",
               icon: <Clock className="h-4 w-4" strokeWidth={2.25} />,
               variant: "resolution",
               sparklineData: kpiSparklines.resolution,
               hint: `MTTR: ${mttrValue}`,
-            },
-            {
-              label: "Garantias concedidas",
-              value: formatCurrency(totalWarrantyValue),
-              icon: <ShieldCheck className="h-4 w-4" strokeWidth={2.25} />,
-              variant: "warranty",
-              sparklineData: kpiSparklines.warranty,
-              hint: `Recorrência: ${recurrenceRate}`,
-              hintAlert: true,
             },
           ]}
         />

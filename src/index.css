@@ -251,7 +251,7 @@
   }
 
   .reports-page {
-    background: #f8fafc;
+    background: var(--color-bg);
   }
 
   .reports-exec {
@@ -865,4 +865,52 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+:root {
+  --app-topbar-height: 6rem;
+  --gradient-brand-title: linear-gradient(90deg, #ff8c42 0%, #e84e00 45%, #f59e0b 100%);
+}
+
+@layer components {
+  .app-logo-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 40;
+    width: 16rem;
+    height: var(--app-topbar-height);
+    background-color: var(--color-sidebar);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .sidebar-shell {
+    position: fixed;
+    left: 0;
+    top: var(--app-topbar-height);
+    z-index: 30;
+    width: 16rem;
+    height: calc(100vh - var(--app-topbar-height));
+    background-color: var(--color-sidebar);
+    border-right: 1px solid var(--color-border);
+  }
+
+  .app-brand-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    background: var(--gradient-brand-title);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .app-brand-greeting {
+    margin-top: 0.125rem;
+    font-size: 1rem;
+    line-height: 1.5rem;
+    color: var(--color-text-secondary);
+  }
 }

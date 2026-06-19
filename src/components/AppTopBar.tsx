@@ -4,9 +4,10 @@
  */
 
 import React from "react";
-import BrandLogo from "./ui/BrandLogo";
 import NotificationCenter from "./NotificationCenter";
+import { useHeaderToolbar } from "../context/HeaderToolbarContext";
 import { AppNotification, User } from "../types";
+import { SYSTEM_NAME } from "../navigation";
 
 interface AppTopBarProps {
   currentUser: User;
@@ -19,25 +20,29 @@ export default function AppTopBar({
   notifications,
   onNavigateToRequest,
 }: AppTopBarProps) {
+  const { toolbar } = useHeaderToolbar();
   const firstName = currentUser.name.trim().split(/\s+/)[0] || currentUser.name;
 
   return (
-    <header className="relative z-30 shrink-0 bg-card/95 backdrop-blur-md border-b border-border/60">
-      <div className="flex items-center gap-4 px-6 lg:px-8 py-3 min-w-0">
-        <BrandLogo size="header" showText={false} flush />
-        <div className="min-w-0 pl-4 border-l border-slate-200/90">
-          <p className="text-xs text-slate-600">Bem vindo(a).</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mt-0.5 truncate">
-            Olá, {firstName}.
+    <header className="app-topbar relative z-30 shrink-0 bg-bg">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between px-6 lg:px-8 pt-14 pb-4 lg:pt-4 min-w-0 w-full">
+        <div className="min-w-0 flex flex-col">
+          <h1 className="app-brand-title leading-tight">{SYSTEM_NAME}</h1>
+          <p className="app-brand-greeting">
+            Olá, <span className="font-semibold text-text-primary">{firstName}</span>
           </p>
         </div>
-        <div className="ml-auto shrink-0">
-          <NotificationCenter
-            notifications={notifications}
-            currentUserId={currentUser.id}
-            onNavigateToRequest={onNavigateToRequest}
-            compact
-          />
+
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3 shrink-0 lg:pt-0.5 w-full lg:w-auto lg:max-w-[min(100%,52rem)]">
+          {toolbar}
+          <div className="relative z-40 shrink-0">
+            <NotificationCenter
+              notifications={notifications}
+              currentUserId={currentUser.id}
+              onNavigateToRequest={onNavigateToRequest}
+              compact
+            />
+          </div>
         </div>
       </div>
     </header>

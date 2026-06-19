@@ -11,25 +11,29 @@ interface KpiSparklineProps {
   fillColor?: string;
   className?: string;
   id?: string;
+  width?: number;
+  height?: number;
 }
 
-/** Sparkline SVG discreto para KPIs — escala automática dos dados. */
+/** Sparkline SVG — escala automática; reflete a série temporal dos dados. */
 export default function KpiSparkline({
   data,
   strokeColor = "#E84E00",
   fillColor = "rgba(232,78,0,0.1)",
   className = "",
   id = "spark",
+  width = 72,
+  height = 32,
 }: KpiSparklineProps) {
   const { linePath, areaPath } = useMemo(() => {
     const values = data.length > 0 ? data : [0];
     const max = Math.max(...values, 0.001);
     const min = Math.min(...values, 0);
     const range = max - min || 1;
-    const w = 72;
-    const h = 32;
+    const w = width;
+    const h = height;
     const padX = 2;
-    const padY = 3;
+    const padY = 4;
     const innerW = w - padX * 2;
     const innerH = h - padY * 2;
 
@@ -43,14 +47,15 @@ export default function KpiSparkline({
     const area = `${line} L ${points[points.length - 1].x.toFixed(1)} ${h - padY} L ${points[0].x.toFixed(1)} ${h - padY} Z`;
 
     return { linePath: line, areaPath: area };
-  }, [data]);
+  }, [data, width, height]);
 
   const gradId = `${id}-fill`;
 
   return (
     <svg
-      viewBox="0 0 72 32"
-      className={`w-[72px] h-8 shrink-0 opacity-80 ${className}`}
+      viewBox={`0 0 ${width} ${height}`}
+      className={`shrink-0 ${className}`}
+      style={{ width, height }}
       aria-hidden
     >
       <defs>

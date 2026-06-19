@@ -34,3 +34,5 @@ export const TAB_PAGE_DESCRIPTIONS: Record<AppTab, string> = {
 
 export const SYSTEM_NAME = "Gestão de Assistências e Manutenções";
 export const SYSTEM_SUBTITLE = "Central de serviços";
+
+export const AXON_ICON_SRC = "/Axon-Icon-Laranja-Preto (1).png";

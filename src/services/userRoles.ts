@@ -52,6 +52,11 @@ export function canEditRat(profile: string): boolean {
   return isAdminProfile(profile) || isTechnicianProfile(profile);
 }
 
+/** Diagnóstico técnico na O.S. (triagem): Técnico e Administrador. */
+export function canEditTechnicalDiagnostic(profile: string): boolean {
+  return isAdminProfile(profile) || isTechnicianProfile(profile);
+}
+
 /** Liberação do equipamento e coluna Liberado: somente Administrador. */
 export function canReleaseEquipment(profile: string): boolean {
   return isAdminProfile(profile);

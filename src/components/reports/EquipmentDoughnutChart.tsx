@@ -16,6 +16,9 @@ export interface DoughnutSegment {
   strokeOffset: number;
 }
 
+/** Circunferência do anel (r=58 no viewBox 180×180). */
+export const EQUIPMENT_DOUGHNUT_CIRCUMFERENCE = 2 * Math.PI * 58;
+
 interface EquipmentDoughnutChartProps {
   segments: DoughnutSegment[];
   totalRepairs: number;
@@ -51,51 +54,57 @@ export default function EquipmentDoughnutChart({
       subtitle="Distribuição por tipo de equipamento"
       action={<DashboardChip tone="neutral">{totalRequests} O.S.</DashboardChip>}
     >
-      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-        <div className="relative w-[120px] h-[120px] shrink-0">
-          <svg
-            viewBox="0 0 180 180"
-            className="w-full h-full transform -rotate-90"
-            aria-hidden
-          >
-            <circle cx="90" cy="90" r="50" fill="transparent" stroke="#f1f5f9" strokeWidth="20" />
-            {segments.map((segment, idx) => (
-              <circle
-                key={segment.name}
-                cx="90"
-                cy="90"
-                r="50"
-                fill="transparent"
-                stroke={segment.color}
-                strokeWidth="20"
-                strokeDasharray={segment.strokeDash}
-                strokeDashoffset={segment.strokeOffset}
-                strokeLinecap="butt"
-                className="transition-all duration-700 ease-out"
-                style={{ transitionDelay: `${idx * 60}ms` }}
-              >
-                <title>{`${segment.name}: ${segment.count} (${segment.percent}%)`}</title>
-              </circle>
-            ))}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-2xl font-bold text-slate-900 tabular-nums">{totalRepairs}</span>
-            <span className="text-[9px] text-slate-500 uppercase font-semibold tracking-wider">Reparos</span>
+      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+        <div className="flex flex-col items-center shrink-0">
+          <div className="relative w-[132px] h-[132px]">
+            <svg
+              viewBox="0 0 180 180"
+              className="w-full h-full -rotate-90"
+              aria-hidden
+            >
+              <circle cx="90" cy="90" r="58" fill="transparent" stroke="#f1f5f9" strokeWidth="18" />
+              {segments.map((segment, idx) => (
+                <circle
+                  key={segment.name}
+                  cx="90"
+                  cy="90"
+                  r="58"
+                  fill="transparent"
+                  stroke={segment.color}
+                  strokeWidth="18"
+                  strokeDasharray={segment.strokeDash}
+                  strokeDashoffset={segment.strokeOffset}
+                  strokeLinecap="butt"
+                  className="transition-all duration-700 ease-out"
+                  style={{ transitionDelay: `${idx * 60}ms` }}
+                >
+                  <title>{`${segment.name}: ${segment.count} (${segment.percent}%)`}</title>
+                </circle>
+              ))}
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span className="text-2xl font-bold text-slate-900 tabular-nums leading-none">
+                {totalRepairs}
+              </span>
+            </div>
           </div>
+          <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            Total de reparos
+          </p>
         </div>
 
-        <div className="flex-1 w-full min-w-0 space-y-1.5">
+        <div className="flex-1 w-full min-w-0 space-y-2 pt-0.5">
           {segments.map((segment) => (
             <div key={segment.name} className="flex items-center gap-2 text-xs">
               <span
-                className="w-2 h-2 rounded-sm shrink-0"
+                className="w-2.5 h-2.5 rounded-sm shrink-0"
                 style={{ backgroundColor: segment.color }}
               />
               <span className="flex-1 min-w-0 truncate text-slate-700 font-medium" title={segment.name}>
                 {segment.name}
               </span>
               <span className="shrink-0 font-bold text-slate-900 tabular-nums">{segment.count}x</span>
-              <span className="shrink-0 text-[10px] text-slate-400 tabular-nums w-8 text-right">
+              <span className="shrink-0 text-[10px] text-slate-400 tabular-nums w-9 text-right">
                 {segment.percent}%
               </span>
             </div>

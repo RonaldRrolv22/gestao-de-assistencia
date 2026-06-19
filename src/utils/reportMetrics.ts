@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MaintenanceRequest } from "../types";
+import { Budget, MaintenanceRequest, ProductCatalog } from "../types";
 
 export type ReportTimeFilter = "30" | "90" | "year" | "all";
 
@@ -112,4 +112,41 @@ export function isReleasedInReportPeriod(
 
 export function isOrcamentoColumn(columnId: MaintenanceRequest["columnId"]): boolean {
   return columnId === "orcamento" || columnId === "recusado";
+}
+
+/** Estimativa de custo de uma O.S. em garantia (mesma lógica dos KPIs de relatório). */
+export function estimateWarrantyBudgetValue(
+  budget: Budget | undefined,
+  products: ProductCatalog[]
+): number {
+  if (!budget?.isWarranty) return 0;
+
+  let total = 0;
+  budget.products.forEach((bp) => {
+    const catProd = products.find((p) => p.id === bp.productId);
+    total += (catProd ? catProd.baseValue : 300) * bp.quantity;
+  });
+  budget.services.forEach(() => {
+    total += 150;
+  });
+  return total;
+}
+
+export interface MonthBucket {
+  index: number;
+  year: number;
+}
+
+/** Últimos N meses calendário (inclui o mês atual). */
+export function buildRecentMonthBuckets(monthCount: number, now = new Date()): MonthBucket[] {
+  const result: MonthBucket[] = [];
+  for (let i = monthCount - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    result.push({ index: d.getMonth(), year: d.getFullYear() });
+  }
+  return result;
+}
+
+export function monthBucketIndex(date: Date, buckets: MonthBucket[]): number {
+  return buckets.findIndex((m) => m.index === date.getMonth() && m.year === date.getFullYear());
 }

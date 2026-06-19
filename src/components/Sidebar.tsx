@@ -27,9 +27,19 @@ interface SidebarProps {
   setActiveTab: (tab: AppTab) => void;
   onOpenHubTestes: () => void | Promise<void>;
   onLogout: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-export default function Sidebar({ currentUser, activeTab, setActiveTab, onOpenHubTestes, onLogout }: SidebarProps) {
+export default function Sidebar({
+  currentUser,
+  activeTab,
+  setActiveTab,
+  onOpenHubTestes,
+  onLogout,
+  mobileOpen = false,
+  onMobileClose,
+}: SidebarProps) {
   const [showHelpManual, setShowHelpManual] = useState(false);
   const isAdmin = isAdminProfile(currentUser.profile);
   const canOpenHub = canAccessHubTestes(currentUser.profile);
@@ -44,15 +54,17 @@ export default function Sidebar({ currentUser, activeTab, setActiveTab, onOpenHu
     { id: "configuracoes" as const, label: "Configurações", icon: Sliders, allowed: isAdmin },
   ];
 
-  return (
-    <aside
-      id="sidebar-container"
-      className="w-64 bg-sidebar text-text-primary flex flex-col shrink-0 h-screen border-r border-border"
-    >
-      <div className="px-4 py-4 border-b border-border/80 shrink-0">
-        <SystemBrand size="md" className="w-full" />
-      </div>
+  const handleNav = (item: (typeof navigationItems)[number]) => {
+    if ("external" in item && item.external) {
+      void onOpenHubTestes();
+    } else {
+      setActiveTab(item.id);
+    }
+    onMobileClose?.();
+  };
 
+  const body = (
+    <>
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
         {navigationItems
           .filter((item) => item.allowed)
@@ -63,13 +75,7 @@ export default function Sidebar({ currentUser, activeTab, setActiveTab, onOpenHu
               <button
                 key={item.id}
                 id={`nav-item-${item.id}`}
-                onClick={() => {
-                  if ("external" in item && item.external) {
-                    void onOpenHubTestes();
-                    return;
-                  }
-                  setActiveTab(item.id);
-                }}
+                onClick={() => handleNav(item)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm rounded-xl text-left animate-nav sidebar-nav-btn ${
                   isActive
                     ? "nav-active-pill shadow-glow-orange ring-1 ring-white/20"
@@ -123,6 +129,29 @@ export default function Sidebar({ currentUser, activeTab, setActiveTab, onOpenHu
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      <aside id="sidebar-container" className="sidebar-shell hidden lg:flex flex-col text-text-primary">
+        {body}
+      </aside>
+
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/40"
+            aria-label="Fechar menu"
+            onClick={onMobileClose}
+          />
+          <aside className="relative z-10 w-64 max-w-[85vw] h-full flex flex-col shadow-premium bg-sidebar border-r border-border">
+            <SystemBrand variant="sidebar" />
+            {body}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

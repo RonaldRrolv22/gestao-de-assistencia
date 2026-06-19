@@ -34,22 +34,24 @@ export default function ModalShell({
 }: ModalShellProps) {
   return (
     <div
-      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 ${zIndex} no-print animate-fade-in`}
+      className={`fixed inset-0 bg-slate-900/60 backdrop-blur-xs overflow-y-auto ${zIndex} no-print animate-fade-in`}
     >
-      <div
-        className={`bg-card rounded-2xl w-full ${MAX_WIDTH[maxWidth]} shadow-2xl border border-border flex flex-col max-h-[92vh] overflow-hidden animate-slide-up ${className}`}
-      >
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-4 right-4 z-10 p-2 rounded-xl bg-white/90 border border-border text-text-secondary hover:text-text-primary hover:bg-white transition-colors"
-            aria-label="Fechar"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-        {children}
+      <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+        <div
+          className={`relative bg-card rounded-2xl w-full ${MAX_WIDTH[maxWidth]} shadow-2xl border border-border flex flex-col max-h-[min(92vh,calc(100vh-3rem))] overflow-hidden animate-slide-up ${className}`}
+        >
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-4 right-4 z-10 p-2 rounded-xl bg-white/90 border border-border text-text-secondary hover:text-text-primary hover:bg-white transition-colors"
+              aria-label="Fechar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );

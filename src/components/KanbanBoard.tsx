@@ -38,7 +38,7 @@ import { formatDate } from "../utils";
 import { formatRequestDisplayId } from "../services/requestIds";
 import { canMoveKanbanCard, getKanbanMoveBlockReason } from "../utils/kanbanMovement";
 import { appNoticeError, appNoticeSuccess, appNoticeWarning } from "../utils/appNotice";
-import { canMoveToOrcamento, isAdminProfile } from "../services/userRoles";
+import { canMoveToOrcamento, isAdminProfile, canEditTechnicalDiagnostic } from "../services/userRoles";
 import { createWorkflowNotification } from "../services/workflowNotifications";
 import { triggerMaintenanceStartedEmail } from "../services/documentEmailApi";
 import { uploadSolicitationAttachments } from "../services/storageService";
@@ -125,6 +125,8 @@ export default function KanbanBoard({
   initialEditingRequest,
   onCloseEditingRequest
 }: KanbanBoardProps) {
+
+  const canFillDiagnostic = canEditTechnicalDiagnostic(currentUser.profile);
 
   // Validation feedback state
   const [showErrors, setShowErrors] = useState(false);
@@ -285,7 +287,7 @@ export default function KanbanBoard({
         openingDate: new Date().toISOString().split("T")[0],
         ...(receivedDate ? { equipmentReceivedDate: receivedDate } : {}),
         problemDescription: requestDescForm.problemDescription.trim(),
-        initialDiagnostic: requestDescForm.initialDiagnostic.trim(),
+        initialDiagnostic: canFillDiagnostic ? requestDescForm.initialDiagnostic.trim() : "",
       });
 
       if (!created) return;
@@ -915,12 +917,20 @@ export default function KanbanBoard({
                   </div>
                   <div>
                     <label className={ADD_MODAL_LABEL}>Diagnóstico Técnico</label>
-                    <textarea
-                      placeholder="Observações visuais obtidas durante a recepção no balcão e triagem de entrada..."
-                      value={requestDescForm.initialDiagnostic}
-                      onChange={(e) => setRequestDescForm({ ...requestDescForm, initialDiagnostic: e.target.value })}
-                      className={`${ADD_MODAL_INPUT} min-h-[88px] resize-y text-slate-800`}
-                    />
+                    {canFillDiagnostic ? (
+                      <textarea
+                        placeholder="Observações visuais obtidas durante a recepção no balcão e triagem de entrada..."
+                        value={requestDescForm.initialDiagnostic}
+                        onChange={(e) =>
+                          setRequestDescForm({ ...requestDescForm, initialDiagnostic: e.target.value })
+                        }
+                        className={`${ADD_MODAL_INPUT} min-h-[88px] resize-y text-slate-800`}
+                      />
+                    ) : (
+                      <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-500 italic">
+                        Preenchimento restrito a Técnico e Administrador após triagem do equipamento.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1090,30 +1100,38 @@ export default function KanbanBoard({
                   </div>
                   <div>
                     <span className="text-slate-500 font-semibold block mb-1">Diagnóstico Técnico:</span>
-                    <div className="flex gap-2 items-start mt-1.5">
-                      <textarea
-                        value={editedInitialDiagnostic}
-                        onChange={(e) => setEditedInitialDiagnostic(e.target.value)}
-                        placeholder="Nenhum diagnóstico visual cadastrado. Caso necessário, escreva ou edite-o aqui..."
-                        className="flex-1 text-text-primary p-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/15 text-xs min-h-[75px] bg-white resize-y"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!editingRequest) return;
-                          const updatedReq = {
-                            ...editingRequest,
-                            initialDiagnostic: editedInitialDiagnostic.trim()
-                          };
-                          onUpdateRequest(updatedReq);
-                          handleSetEditingRequest(updatedReq);
-                          appNoticeSuccess("Diagnóstico visual de triagem atualizado com sucesso!");
-                        }}
-                        className="px-4 py-2.5 bg-brand-gradient hover:opacity-90 text-white font-semibold rounded-xl shrink-0 transition-all text-xs shadow-sm"
-                      >
-                        Salvar
-                      </button>
-                    </div>
+                    {canFillDiagnostic ? (
+                      <div className="flex gap-2 items-start mt-1.5">
+                        <textarea
+                          value={editedInitialDiagnostic}
+                          onChange={(e) => setEditedInitialDiagnostic(e.target.value)}
+                          placeholder="Nenhum diagnóstico visual cadastrado. Caso necessário, escreva ou edite-o aqui..."
+                          className="flex-1 text-text-primary p-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/15 text-xs min-h-[75px] bg-white resize-y"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!editingRequest) return;
+                            const updatedReq = {
+                              ...editingRequest,
+                              initialDiagnostic: editedInitialDiagnostic.trim(),
+                            };
+                            onUpdateRequest(updatedReq);
+                            handleSetEditingRequest(updatedReq);
+                            appNoticeSuccess("Diagnóstico visual de triagem atualizado com sucesso!");
+                          }}
+                          className="px-4 py-2.5 bg-brand-gradient hover:opacity-90 text-white font-semibold rounded-xl shrink-0 transition-all text-xs shadow-sm"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-slate-700 bg-white p-2.5 rounded border border-slate-200 leading-relaxed font-sans whitespace-pre-wrap">
+                        {editingRequest.initialDiagnostic?.trim()
+                          ? editingRequest.initialDiagnostic
+                          : "Aguardando preenchimento pelo técnico responsável."}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

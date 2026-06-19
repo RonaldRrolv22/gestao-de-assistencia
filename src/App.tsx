@@ -62,9 +62,11 @@ import {
 import PublicPaymentPage from "./pages/PublicPaymentPage";
 import AppTopBar from "./components/AppTopBar";
 import { usePaymentPolling } from "./hooks/usePaymentPolling";
-import { Loader2 } from "lucide-react";
+import { Loader2, Menu } from "lucide-react";
 import { isAdminProfile, PROTECTED_USER_EMAILS, canEditBudget, canEditRat, canAccessHubTestes, canReleaseEquipment } from "./services/userRoles";
 import { createWorkflowNotification } from "./services/workflowNotifications";
+import { HeaderToolbarProvider } from "./context/HeaderToolbarContext";
+import SystemBrand from "./components/ui/SystemBrand";
 
 export default function App() {
   const publicPathMatch =
@@ -95,6 +97,7 @@ function AppShell() {
   usePaymentPolling(requests, !!currentUser);
 
   const [activeTab, setActiveTab] = useState<AppTab>("relatorios");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [kanbanSearchTerm, setKanbanSearchTerm] = useState("");
   const [kanbanEquipmentFilter, setKanbanEquipmentFilter] = useState("");
   const [kanbanShowEquipDropdown, setKanbanShowEquipDropdown] = useState(false);
@@ -673,16 +676,32 @@ function AppShell() {
   const userCanRelease = canReleaseEquipment(profile);
 
   return (
+    <HeaderToolbarProvider>
     <div className="flex h-screen w-screen overflow-hidden bg-bg font-sans">
+      <div className="app-logo-bar hidden lg:flex" aria-label="Logo Axon">
+        <SystemBrand variant="topbar" />
+      </div>
+
+      <button
+        type="button"
+        className="lg:hidden fixed top-4 left-4 z-50 flex items-center justify-center w-10 h-10 rounded-xl bg-card border border-border shadow-card text-text-primary"
+        onClick={() => setMobileNavOpen(true)}
+        aria-label="Abrir menu"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
       <Sidebar
         currentUser={currentUser}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenHubTestes={handleOpenHubTestes}
         onLogout={handleLogout}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
       />
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative lg:ml-64">
         <AppTopBar
           currentUser={currentUser}
           notifications={notifications}
@@ -871,5 +890,6 @@ function AppShell() {
         </ErrorBoundary>
       )}
     </div>
+    </HeaderToolbarProvider>
   );
 }

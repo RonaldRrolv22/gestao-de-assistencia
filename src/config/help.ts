@@ -9,5 +9,5 @@ export const TRAINING_MANUAL = {
 };
 
 export function pdfViewerUrl(url: string): string {
-  return `${url}#view=FitH&toolbar=1`;
+  return `${url}#page=1&zoom=page-width`;
 }
