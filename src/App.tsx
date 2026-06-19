@@ -63,7 +63,7 @@ import PublicPaymentPage from "./pages/PublicPaymentPage";
 import AppTopBar from "./components/AppTopBar";
 import { usePaymentPolling } from "./hooks/usePaymentPolling";
 import { Loader2, Menu } from "lucide-react";
-import { isAdminProfile, PROTECTED_USER_EMAILS, canEditBudget, canEditRat, canAccessHubTestes, canReleaseEquipment } from "./services/userRoles";
+import { isAdminProfile, PROTECTED_USER_EMAILS, canDraftBudget, canManageBudgetCommercial, canEditRat, canAccessHubTestes, canReleaseEquipment } from "./services/userRoles";
 import { createWorkflowNotification } from "./services/workflowNotifications";
 import { HeaderToolbarProvider } from "./context/HeaderToolbarContext";
 import SystemBrand from "./components/ui/SystemBrand";
@@ -670,7 +670,8 @@ function AppShell() {
 
   const isAdmin = isAdminProfile(currentUser.profile);
   const profile = currentUser.profile;
-  const userCanEditBudget = canEditBudget(profile);
+  const userCanDraftBudget = canDraftBudget(profile);
+  const userCanManageBudget = canManageBudgetCommercial(profile);
   const userCanEditRat = canEditRat(profile);
   const userCanOpenHub = canAccessHubTestes(profile);
   const userCanRelease = canReleaseEquipment(profile);
@@ -841,7 +842,8 @@ function AppShell() {
                 setBudgetReturnView(null);
               }
             }}
-            canEdit={userCanEditBudget && !budgetReadOnly}
+            canDraft={userCanDraftBudget && !budgetReadOnly}
+            canManageCommercial={userCanManageBudget && !budgetReadOnly}
             initialShowPdf={activeBudgetReqShowPdf}
           />
         </ErrorBoundary>

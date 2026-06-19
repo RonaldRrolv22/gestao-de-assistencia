@@ -16,6 +16,7 @@ interface WarrantyCardProps {
   isWarranty: boolean;
   chargeShippingOnWarranty: boolean;
   canEdit: boolean;
+  canEditChargeShipping?: boolean;
   onChange: (value: boolean) => void;
   onChargeShippingChange: (value: boolean) => void;
 }
@@ -24,9 +25,11 @@ export default function WarrantyCard({
   isWarranty,
   chargeShippingOnWarranty,
   canEdit,
+  canEditChargeShipping,
   onChange,
   onChargeShippingChange,
 }: WarrantyCardProps) {
+  const canEditFreightOption = canEditChargeShipping ?? canEdit;
   return (
     <SummaryCard title="Garantia técnica" subtitle="Cobertura de peças e serviços">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -76,7 +79,7 @@ export default function WarrantyCard({
           <div className={BUDGET_SEGMENTED_WRAP}>
             <button
               type="button"
-              disabled={!canEdit}
+              disabled={!canEditFreightOption}
               onClick={() => onChargeShippingChange(true)}
               className={chargeShippingOnWarranty ? BUDGET_SEGMENTED_ACTIVE : BUDGET_SEGMENTED_IDLE}
             >
@@ -84,7 +87,7 @@ export default function WarrantyCard({
             </button>
             <button
               type="button"
-              disabled={!canEdit}
+              disabled={!canEditFreightOption}
               onClick={() => onChargeShippingChange(false)}
               className={!chargeShippingOnWarranty ? BUDGET_SEGMENTED_ACTIVE : BUDGET_SEGMENTED_IDLE}
             >

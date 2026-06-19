@@ -51,7 +51,8 @@ interface BudgetModalProps {
   onApproveBudget: (requestId: string, budget?: Budget) => void | Promise<void>;
   onRejectBudget: (requestId: string) => void;
   onClose: () => void;
-  canEdit: boolean;
+  canDraft: boolean;
+  canManageCommercial: boolean;
   initialShowPdf?: boolean;
 }
 
@@ -78,9 +79,11 @@ export default function BudgetModal({
   onApproveBudget,
   onRejectBudget,
   onClose,
-  canEdit,
+  canDraft,
+  canManageCommercial,
   initialShowPdf = false
 }: BudgetModalProps) {
+  const canEditItems = canDraft || canManageCommercial;
   
   // Set up local state for budgeting editing
   const [isWarranty, setIsWarranty] = useState(request.budget?.isWarranty || false);
@@ -198,6 +201,7 @@ export default function BudgetModal({
   calculatedTotalRef.current = calculatedTotal;
 
   useEffect(() => {
+    if (!canManageCommercial) return;
     if (request.columnId !== "orcamento") return;
     if (isWarranty && !chargeShippingOnWarranty) return;
     if (!isWarranty && shipping <= 0) return;
@@ -314,6 +318,7 @@ export default function BudgetModal({
     finalDiscount,
     calculatedSubtotal,
     shippingService,
+    canManageCommercial,
   ]);
 
   // Handle adding product item
@@ -631,7 +636,8 @@ export default function BudgetModal({
             <WarrantyCard
               isWarranty={isWarranty}
               chargeShippingOnWarranty={chargeShippingOnWarranty}
-              canEdit={canEdit}
+              canEdit={canEditItems}
+              canEditChargeShipping={canManageCommercial}
               onChange={(value) => {
                 setIsWarranty(value);
                 if (!value) setChargeShippingOnWarranty(false);
@@ -639,9 +645,15 @@ export default function BudgetModal({
               onChargeShippingChange={setChargeShippingOnWarranty}
             />
 
+            {canDraft && !canManageCommercial && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/80 rounded-xl px-4 py-3">
+                Modo técnico: cadastre os itens e o tipo de assistência, depois salve o rascunho. O usuário comercial dará continuidade ao fluxo.
+              </p>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
-                {canEdit && (
+                {canEditItems && (
                   <BudgetAddItemForms
                     filteredProductsCatalog={filteredProductsCatalog}
                     servicesCatalog={servicesCatalog}
@@ -661,7 +673,7 @@ export default function BudgetModal({
                 <BudgetItemsTable
                   budgetProducts={budgetProducts}
                   budgetServices={budgetServices}
-                  canEdit={canEdit}
+                  canEdit={canEditItems}
                   showErrors={showErrors}
                   onRemoveProduct={handleRemoveProduct}
                   onRemoveService={handleRemoveService}
@@ -677,7 +689,7 @@ export default function BudgetModal({
                   calculatedTotal={calculatedTotal}
                   calculatedSubtotal={calculatedSubtotal}
                   isWarranty={isWarranty}
-                  canEdit={canEdit}
+                  canEdit={canManageCommercial}
                   shippingService={shippingService}
                   shippingCep={shippingCep}
                   cepError={cepError}
@@ -692,7 +704,8 @@ export default function BudgetModal({
               </div>
             </div>
 
-            {(request.columnId === "orcamento" || paymentSnapshot?.status === "pending") &&
+            {canManageCommercial &&
+              (request.columnId === "orcamento" || paymentSnapshot?.status === "pending") &&
               paymentSnapshot?.status !== "paid" &&
               (warrantyPixOnly || !isWarranty) && (
               <BudgetPaymentSection
@@ -713,14 +726,15 @@ export default function BudgetModal({
           </div>
 
           <StickyActionFooter
-            canEdit={canEdit}
+            canSaveDraft={canDraft}
+            canManageCommercial={canManageCommercial}
             isWarranty={isWarranty}
             showApproveWarranty={showWarrantyApprove}
             clientEmail={request.clientEmail}
             sendingEmail={sendingEmail}
             emailStatus={<EmailStatusIcons request={request} types={["budget"]} />}
             onExportPdf={() => setShowPdfPreview(true)}
-            onSendEmail={canEdit ? () => setShowSendEmailConfirm(true) : undefined}
+            onSendEmail={canManageCommercial ? () => setShowSendEmailConfirm(true) : undefined}
             onClose={onClose}
             onSaveDraft={() => setShowSaveDraftConfirm(true)}
             onReject={() => setShowRejectConfirm(true)}

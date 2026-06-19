@@ -38,13 +38,23 @@ export function canAccessHubTestes(profile: string): boolean {
   return isAdminProfile(profile) || isTechnicianProfile(profile);
 }
 
-/** Orçamento — mover card e editar modal: Usuário e Administrador. */
+/** Orçamento — mover card e fluxo comercial completo: Usuário e Administrador. */
 export function canEditBudget(profile: string): boolean {
+  return canManageBudgetCommercial(profile);
+}
+
+/** Fluxo comercial do orçamento (aprovar, recusar, e-mail, pagamento, frete): Usuário e Administrador. */
+export function canManageBudgetCommercial(profile: string): boolean {
   return isAdminProfile(profile) || isUsuarioProfile(profile);
 }
 
+/** Montagem técnica do orçamento (itens, tipo de assistência e rascunho): Técnico, Usuário e Administrador. */
+export function canDraftBudget(profile: string): boolean {
+  return isAdminProfile(profile) || isUsuarioProfile(profile) || isTechnicianProfile(profile);
+}
+
 export function canMoveToOrcamento(profile: string): boolean {
-  return canEditBudget(profile);
+  return canManageBudgetCommercial(profile);
 }
 
 /** RAT — editar e finalizar: Técnico e Administrador. */

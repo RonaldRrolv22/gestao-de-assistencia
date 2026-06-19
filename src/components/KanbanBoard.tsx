@@ -38,7 +38,7 @@ import { formatDate } from "../utils";
 import { formatRequestDisplayId } from "../services/requestIds";
 import { canMoveKanbanCard, getKanbanMoveBlockReason } from "../utils/kanbanMovement";
 import { appNoticeError, appNoticeSuccess, appNoticeWarning } from "../utils/appNotice";
-import { canMoveToOrcamento, isAdminProfile, canEditTechnicalDiagnostic } from "../services/userRoles";
+import { canMoveToOrcamento, isAdminProfile, canEditTechnicalDiagnostic, canManageBudgetCommercial } from "../services/userRoles";
 import { createWorkflowNotification } from "../services/workflowNotifications";
 import { triggerMaintenanceStartedEmail } from "../services/documentEmailApi";
 import { uploadSolicitationAttachments } from "../services/storageService";
@@ -127,6 +127,7 @@ export default function KanbanBoard({
 }: KanbanBoardProps) {
 
   const canFillDiagnostic = canEditTechnicalDiagnostic(currentUser.profile);
+  const canManageBudget = canManageBudgetCommercial(currentUser.profile);
 
   // Validation feedback state
   const [showErrors, setShowErrors] = useState(false);
@@ -572,9 +573,11 @@ export default function KanbanBoard({
               onCardClick={handleCardClick}
               onSaveReceivedDate={handleSaveReceivedDate}
               onDragStart={handleDragStart}
-              onDeleteCard={setRequestToDelete}
+              onDeleteCard={canManageBudget ? setRequestToDelete : undefined}
               onRejectBudget={
-                col.id === "orcamento" ? (req) => setRejectConfirmRequest(req) : undefined
+                col.id === "orcamento" && canManageBudget
+                  ? (req) => setRejectConfirmRequest(req)
+                  : undefined
               }
               onGenerateShippingLabel={
                 col.id === "liberado" && onGenerateShippingLabel

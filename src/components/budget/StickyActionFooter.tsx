@@ -8,7 +8,8 @@ import { Ban, CheckCircle2, Mail, Printer } from "lucide-react";
 import ActionButton from "../ui/ActionButton";
 
 interface StickyActionFooterProps {
-  canEdit: boolean;
+  canSaveDraft: boolean;
+  canManageCommercial: boolean;
   isWarranty: boolean;
   showApproveWarranty?: boolean;
   clientEmail?: string;
@@ -23,7 +24,8 @@ interface StickyActionFooterProps {
 }
 
 export default function StickyActionFooter({
-  canEdit,
+  canSaveDraft,
+  canManageCommercial,
   isWarranty,
   showApproveWarranty = true,
   clientEmail,
@@ -38,39 +40,40 @@ export default function StickyActionFooter({
 }: StickyActionFooterProps) {
   return (
     <div className="sticky bottom-0 z-10 px-4 sm:px-6 py-4 border-t border-slate-200/80 bg-white/95 backdrop-blur-sm shadow-[0_-8px_24px_-8px_rgba(15,23,42,0.08)] flex flex-col gap-3">
-      {emailStatus ? <div className="flex items-center gap-2">{emailStatus}</div> : null}
+      {canManageCommercial && emailStatus ? (
+        <div className="flex items-center gap-2">{emailStatus}</div>
+      ) : null}
       <div className="flex flex-col sm:flex-row flex-wrap justify-between items-stretch sm:items-center gap-3">
-      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-        <ActionButton
-          id="btn-export-pdf-budget"
-          variant="secondary"
-          className="w-full sm:w-auto"
-          icon={<Printer className="h-4 w-4" />}
-          onClick={onExportPdf}
-        >
-          Visualizar PDF Comercial
-        </ActionButton>
-        {onSendEmail && (
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <ActionButton
-            id="btn-send-budget-email"
+            id="btn-export-pdf-budget"
             variant="secondary"
             className="w-full sm:w-auto"
-            icon={<Mail className="h-4 w-4" />}
-            onClick={onSendEmail}
-            disabled={!clientEmail?.trim() || sendingEmail}
-            title={!clientEmail?.trim() ? "Cliente sem e-mail cadastrado" : undefined}
+            icon={<Printer className="h-4 w-4" />}
+            onClick={onExportPdf}
           >
-            {sendingEmail ? "Enviando..." : "Enviar por E-mail"}
+            Visualizar PDF Comercial
           </ActionButton>
-        )}
-      </div>
+          {canManageCommercial && onSendEmail && (
+            <ActionButton
+              id="btn-send-budget-email"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              icon={<Mail className="h-4 w-4" />}
+              onClick={onSendEmail}
+              disabled={!clientEmail?.trim() || sendingEmail}
+              title={!clientEmail?.trim() ? "Cliente sem e-mail cadastrado" : undefined}
+            >
+              {sendingEmail ? "Enviando..." : "Enviar por E-mail"}
+            </ActionButton>
+          )}
+        </div>
 
-      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-        <ActionButton variant="neutral" onClick={onClose} className="w-full sm:w-auto">
-          Fechar
-        </ActionButton>
-        {canEdit && (
-          <>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <ActionButton variant="neutral" onClick={onClose} className="w-full sm:w-auto">
+            Fechar
+          </ActionButton>
+          {canSaveDraft && (
             <ActionButton
               id="btn-save-budget"
               variant="primary"
@@ -79,29 +82,32 @@ export default function StickyActionFooter({
             >
               Salvar Rascunho
             </ActionButton>
-            <ActionButton
-              id="btn-reject-budget"
-              variant="danger"
-              icon={<Ban className="h-4 w-4" />}
-              onClick={onReject}
-              className="w-full sm:w-auto"
-            >
-              Orçamento Recusado
-            </ActionButton>
-            {isWarranty && showApproveWarranty && (
+          )}
+          {canManageCommercial && (
+            <>
               <ActionButton
-                id="btn-approve-budget"
-                variant="success"
-                icon={<CheckCircle2 className="h-4 w-4" />}
-                onClick={onApproveWarranty}
+                id="btn-reject-budget"
+                variant="danger"
+                icon={<Ban className="h-4 w-4" />}
+                onClick={onReject}
                 className="w-full sm:w-auto"
               >
-                Aprovar (Garantia)
+                Orçamento Recusado
               </ActionButton>
-            )}
-          </>
-        )}
-      </div>
+              {isWarranty && showApproveWarranty && (
+                <ActionButton
+                  id="btn-approve-budget"
+                  variant="success"
+                  icon={<CheckCircle2 className="h-4 w-4" />}
+                  onClick={onApproveWarranty}
+                  className="w-full sm:w-auto"
+                >
+                  Aprovar (Garantia)
+                </ActionButton>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
